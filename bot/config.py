@@ -1,8 +1,15 @@
-from pydantic_settings import BaseSettings
-from typing import Optional
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
+from typing import Optional, Union
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
+
     # Bot settings
     BOT_TOKEN: str
 
@@ -28,17 +35,18 @@ class Settings(BaseSettings):
     # Timezone
     TIMEZONE: str = "Europe/Moscow"
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-
-        @classmethod
-        def parse_env_var(cls, field_name: str, raw_val: str):
-            if field_name == "ADMIN_IDS":
-                if not raw_val:
-                    return []
-                return [int(x.strip()) for x in raw_val.split(",")]
-            return raw_val
+    @field_validator("ADMIN_IDS", mode="before")
+    @classmethod
+    def parse_admin_ids(cls, v: Union[str, list, int]) -> list[int]:
+        if isinstance(v, list):
+            return v
+        if isinstance(v, int):
+            return [v]
+        if isinstance(v, str):
+            if not v.strip():
+                return []
+            return [int(x.strip()) for x in v.split(",")]
+        return []
 
 
 settings = Settings()
