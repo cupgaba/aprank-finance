@@ -1,24 +1,21 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
-from aiogram.filters import BaseFilter
 from aiogram.fsm.context import FSMContext
 
 from ...database import Database
 from ...database.models import User
 from ...keyboards.admin import AdminKeyboards
+from ...keyboards.user import UserKeyboards
 
 menu_router = Router()
 
 
-# Filter for admin only
-class IsAdmin(BaseFilter):
-    async def __call__(self, message: Message, is_admin: bool = False) -> bool:
-        return is_admin
-
-
-@menu_router.message(F.text == "📦 Товары", IsAdmin())
-async def products_menu(message: Message, state: FSMContext):
+@menu_router.message(F.text == "📦 Товары")
+async def products_menu(message: Message, is_admin: bool = False, state: FSMContext):
     """Products management menu"""
+    if not is_admin:
+        return  # Ignore for non-admins
+
     await state.clear()
     await message.answer(
         "📦 <b>Управление товарами</b>\n\n"
@@ -29,7 +26,7 @@ async def products_menu(message: Message, state: FSMContext):
 
 
 @menu_router.callback_query(F.data == "admin:products_menu")
-async def products_menu_callback(callback: CallbackQuery, is_admin: bool, state: FSMContext):
+async def products_menu_callback(callback: CallbackQuery, is_admin: bool = False, state: FSMContext):
     """Products menu callback"""
     if not is_admin:
         await callback.answer("⛔️ Нет доступа", show_alert=True)
@@ -44,9 +41,12 @@ async def products_menu_callback(callback: CallbackQuery, is_admin: bool, state:
     )
 
 
-@menu_router.message(F.text == "📊 Статистика", IsAdmin())
-async def statistics_menu(message: Message, state: FSMContext):
+@menu_router.message(F.text == "📊 Статистика")
+async def statistics_menu(message: Message, is_admin: bool = False, state: FSMContext):
     """Statistics menu"""
+    if not is_admin:
+        return
+
     await state.clear()
     await message.answer(
         "📊 <b>Статистика</b>\n\n"
@@ -56,9 +56,12 @@ async def statistics_menu(message: Message, state: FSMContext):
     )
 
 
-@menu_router.message(F.text == "📥 Закупки", IsAdmin())
-async def supplies_menu(message: Message, state: FSMContext):
+@menu_router.message(F.text == "📥 Закупки")
+async def supplies_menu(message: Message, is_admin: bool = False, state: FSMContext):
     """Supplies menu"""
+    if not is_admin:
+        return
+
     await state.clear()
     await message.answer(
         "📥 <b>Закупки</b>\n\n"
@@ -69,7 +72,7 @@ async def supplies_menu(message: Message, state: FSMContext):
 
 
 @menu_router.callback_query(F.data == "admin:supplies_menu")
-async def supplies_menu_callback(callback: CallbackQuery, is_admin: bool, state: FSMContext):
+async def supplies_menu_callback(callback: CallbackQuery, is_admin: bool = False, state: FSMContext):
     """Supplies menu callback"""
     if not is_admin:
         await callback.answer("⛔️ Нет доступа", show_alert=True)
@@ -84,9 +87,12 @@ async def supplies_menu_callback(callback: CallbackQuery, is_admin: bool, state:
     )
 
 
-@menu_router.message(F.text == "💰 Продажи", IsAdmin())
-async def sales_menu(message: Message, state: FSMContext):
+@menu_router.message(F.text == "💰 Продажи")
+async def sales_menu(message: Message, is_admin: bool = False, state: FSMContext):
     """Sales menu"""
+    if not is_admin:
+        return
+
     await state.clear()
     await message.answer(
         "💰 <b>Продажи</b>\n\n"
@@ -97,7 +103,7 @@ async def sales_menu(message: Message, state: FSMContext):
 
 
 @menu_router.callback_query(F.data == "admin:sales_menu")
-async def sales_menu_callback(callback: CallbackQuery, is_admin: bool, state: FSMContext):
+async def sales_menu_callback(callback: CallbackQuery, is_admin: bool = False, state: FSMContext):
     """Sales menu callback"""
     if not is_admin:
         await callback.answer("⛔️ Нет доступа", show_alert=True)
@@ -112,9 +118,12 @@ async def sales_menu_callback(callback: CallbackQuery, is_admin: bool, state: FS
     )
 
 
-@menu_router.message(F.text == "📤 Списания", IsAdmin())
-async def writeoffs_menu(message: Message, state: FSMContext):
+@menu_router.message(F.text == "📤 Списания")
+async def writeoffs_menu(message: Message, is_admin: bool = False, state: FSMContext):
     """Write-offs menu"""
+    if not is_admin:
+        return
+
     await state.clear()
     await message.answer(
         "📤 <b>Списания</b>\n\n"
@@ -125,7 +134,7 @@ async def writeoffs_menu(message: Message, state: FSMContext):
 
 
 @menu_router.callback_query(F.data == "admin:writeoffs_menu")
-async def writeoffs_menu_callback(callback: CallbackQuery, is_admin: bool, state: FSMContext):
+async def writeoffs_menu_callback(callback: CallbackQuery, is_admin: bool = False, state: FSMContext):
     """Write-offs menu callback"""
     if not is_admin:
         await callback.answer("⛔️ Нет доступа", show_alert=True)
@@ -140,9 +149,12 @@ async def writeoffs_menu_callback(callback: CallbackQuery, is_admin: bool, state
     )
 
 
-@menu_router.message(F.text == "📢 Публикации", IsAdmin())
-async def publications_menu(message: Message, state: FSMContext):
+@menu_router.message(F.text == "📢 Публикации")
+async def publications_menu(message: Message, is_admin: bool = False, state: FSMContext):
     """Publications menu"""
+    if not is_admin:
+        return
+
     await state.clear()
     await message.answer(
         "📢 <b>Публикации</b>\n\n"
@@ -153,7 +165,7 @@ async def publications_menu(message: Message, state: FSMContext):
 
 
 @menu_router.callback_query(F.data == "admin:publications_menu")
-async def publications_menu_callback(callback: CallbackQuery, is_admin: bool, state: FSMContext):
+async def publications_menu_callback(callback: CallbackQuery, is_admin: bool = False, state: FSMContext):
     """Publications menu callback"""
     if not is_admin:
         await callback.answer("⛔️ Нет доступа", show_alert=True)
@@ -168,9 +180,12 @@ async def publications_menu_callback(callback: CallbackQuery, is_admin: bool, st
     )
 
 
-@menu_router.message(F.text == "🔔 Резервы", IsAdmin())
-async def reservations_menu(message: Message, state: FSMContext):
+@menu_router.message(F.text == "🔔 Резервы")
+async def reservations_menu(message: Message, is_admin: bool = False, state: FSMContext):
     """Reservations menu"""
+    if not is_admin:
+        return
+
     await state.clear()
     await message.answer(
         "🔔 <b>Резервирования</b>\n\n"
@@ -181,7 +196,7 @@ async def reservations_menu(message: Message, state: FSMContext):
 
 
 @menu_router.callback_query(F.data == "admin:reservations_menu")
-async def reservations_menu_callback(callback: CallbackQuery, is_admin: bool, state: FSMContext):
+async def reservations_menu_callback(callback: CallbackQuery, is_admin: bool = False, state: FSMContext):
     """Reservations menu callback"""
     if not is_admin:
         await callback.answer("⛔️ Нет доступа", show_alert=True)
@@ -196,9 +211,12 @@ async def reservations_menu_callback(callback: CallbackQuery, is_admin: bool, st
     )
 
 
-@menu_router.message(F.text == "⚙️ Настройки", IsAdmin())
-async def settings_menu(message: Message, state: FSMContext):
+@menu_router.message(F.text == "⚙️ Настройки")
+async def settings_menu(message: Message, is_admin: bool = False, state: FSMContext):
     """Settings menu"""
+    if not is_admin:
+        return
+
     await state.clear()
     await message.answer(
         "⚙️ <b>Настройки</b>\n\n"
@@ -209,7 +227,7 @@ async def settings_menu(message: Message, state: FSMContext):
 
 
 @menu_router.callback_query(F.data == "cancel")
-async def cancel_callback(callback: CallbackQuery, is_admin: bool, state: FSMContext):
+async def cancel_callback(callback: CallbackQuery, is_admin: bool = False, state: FSMContext):
     """Cancel callback"""
     await state.clear()
     await callback.message.delete()
