@@ -1,5 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
+from aiogram.filters import BaseFilter
 from aiogram.fsm.context import FSMContext
 
 from ...database import Database
@@ -10,15 +11,12 @@ menu_router = Router()
 
 
 # Filter for admin only
-class AdminFilter:
-    async def __call__(self, message: Message, is_admin: bool) -> bool:
+class IsAdmin(BaseFilter):
+    async def __call__(self, message: Message, is_admin: bool = False) -> bool:
         return is_admin
 
 
-admin_filter = AdminFilter()
-
-
-@menu_router.message(F.text == "📦 Товары", admin_filter)
+@menu_router.message(F.text == "📦 Товары", IsAdmin())
 async def products_menu(message: Message, state: FSMContext):
     """Products management menu"""
     await state.clear()
@@ -46,7 +44,7 @@ async def products_menu_callback(callback: CallbackQuery, is_admin: bool, state:
     )
 
 
-@menu_router.message(F.text == "📊 Статистика", admin_filter)
+@menu_router.message(F.text == "📊 Статистика", IsAdmin())
 async def statistics_menu(message: Message, state: FSMContext):
     """Statistics menu"""
     await state.clear()
@@ -58,7 +56,7 @@ async def statistics_menu(message: Message, state: FSMContext):
     )
 
 
-@menu_router.message(F.text == "📥 Закупки", admin_filter)
+@menu_router.message(F.text == "📥 Закупки", IsAdmin())
 async def supplies_menu(message: Message, state: FSMContext):
     """Supplies menu"""
     await state.clear()
@@ -86,7 +84,7 @@ async def supplies_menu_callback(callback: CallbackQuery, is_admin: bool, state:
     )
 
 
-@menu_router.message(F.text == "💰 Продажи", admin_filter)
+@menu_router.message(F.text == "💰 Продажи", IsAdmin())
 async def sales_menu(message: Message, state: FSMContext):
     """Sales menu"""
     await state.clear()
@@ -114,7 +112,7 @@ async def sales_menu_callback(callback: CallbackQuery, is_admin: bool, state: FS
     )
 
 
-@menu_router.message(F.text == "📤 Списания", admin_filter)
+@menu_router.message(F.text == "📤 Списания", IsAdmin())
 async def writeoffs_menu(message: Message, state: FSMContext):
     """Write-offs menu"""
     await state.clear()
@@ -142,7 +140,7 @@ async def writeoffs_menu_callback(callback: CallbackQuery, is_admin: bool, state
     )
 
 
-@menu_router.message(F.text == "📢 Публикации", admin_filter)
+@menu_router.message(F.text == "📢 Публикации", IsAdmin())
 async def publications_menu(message: Message, state: FSMContext):
     """Publications menu"""
     await state.clear()
@@ -170,7 +168,7 @@ async def publications_menu_callback(callback: CallbackQuery, is_admin: bool, st
     )
 
 
-@menu_router.message(F.text == "🔔 Резервы", admin_filter)
+@menu_router.message(F.text == "🔔 Резервы", IsAdmin())
 async def reservations_menu(message: Message, state: FSMContext):
     """Reservations menu"""
     await state.clear()
@@ -198,7 +196,7 @@ async def reservations_menu_callback(callback: CallbackQuery, is_admin: bool, st
     )
 
 
-@menu_router.message(F.text == "⚙️ Настройки", admin_filter)
+@menu_router.message(F.text == "⚙️ Настройки", IsAdmin())
 async def settings_menu(message: Message, state: FSMContext):
     """Settings menu"""
     await state.clear()
