@@ -95,17 +95,17 @@ async def add_product_start(callback: CallbackQuery, db: Database, is_admin: boo
         await callback.answer("❌ Бренд не найден", show_alert=True)
         return
 
-    await state.set_state(AdminStates.add_product_name)
+    await state.set_state(AdminStates.add_product_purchase_price)
     await state.update_data(brand_id=brand_id)
 
     await callback.message.edit_text(
-        f"📦 <b>Добавление товара</b>\n\n"
+        f"📦 <b>Добавление товаров</b>\n\n"
         f"Бренд: {brand.name}\n\n"
-        f"Введите название товара (вкус):",
+        f"Введите цену закупки (одна цена для всех товаров):",
         parse_mode="HTML"
     )
     await callback.message.answer(
-        "Ожидаю название...",
+        "Ожидаю цену закупки...",
         reply_markup=CommonKeyboards.cancel()
     )
 
@@ -124,32 +124,13 @@ async def product_brand_selected(callback: CallbackQuery, db: Database, is_admin
         await callback.answer("❌ Бренд не найден", show_alert=True)
         return
 
-    await state.set_state(AdminStates.add_product_name)
+    await state.set_state(AdminStates.add_product_purchase_price)
     await state.update_data(brand_id=brand_id)
 
     await callback.message.edit_text(
-        f"📦 <b>Добавление товара</b>\n\n"
+        f"📦 <b>Добавление товаров</b>\n\n"
         f"Бренд: {brand.name}\n\n"
-        f"Введите название товара (вкус):",
-        parse_mode="HTML"
-    )
-
-
-@products_router.message(AdminStates.add_product_name)
-async def add_product_name(message: Message, state: FSMContext):
-    """Process product name"""
-    name = message.text.strip()
-    if len(name) < 2:
-        await message.answer("❌ Название должно быть не менее 2 символов. Попробуйте снова:")
-        return
-
-    await state.update_data(name=name)
-    await state.set_state(AdminStates.add_product_purchase_price)
-
-    await message.answer(
-        f"📦 Название: <b>{name}</b>\n\n"
-        f"Введите цену закупки (число):",
-        reply_markup=CommonKeyboards.cancel(),
+        f"Введите цену закупки (одна цена для всех товаров):",
         parse_mode="HTML"
     )
 
@@ -177,8 +158,8 @@ async def add_product_purchase_price(message: Message, state: FSMContext):
 
 
 @products_router.message(AdminStates.add_product_sale_price)
-async def add_product_sale_price(message: Message, state: FSMContext):
-    """Process sale price"""
+async def add_product_sale_price(message: Message, db: Database, state: FSMContext):
+    """Process sale price and ask for products list"""
     try:
         price = float(message.text.strip().replace(",", ".").replace(" ", ""))
         if price < 0:
@@ -188,92 +169,137 @@ async def add_product_sale_price(message: Message, state: FSMContext):
         return
 
     await state.update_data(sale_price=price)
-    await state.set_state(AdminStates.add_product_quantity)
+    await state.set_state(AdminStates.add_product_name)
+
+    data = await state.get_data()
+    brand = await db.get_brand_by_id(data["brand_id"])
 
     await message.answer(
         f"💰 Цена продажи: <b>{price}₽</b>\n\n"
-        f"Введите количество:",
+        f"📦 <b>Добавление товаров в {brand.name}</b>\n"
+        f"💵 Закупка: {data['purchase_price']}₽ | 💰 Продажа: {price}₽\n\n"
+        f"Введите товары списком в формате:\n"
+        f"<code>название количество</code>\n\n"
+        f"<b>Пример:</b>\n"
+        f"<code>Красная смородина 2\n"
+        f"Кислое мороженое 1\n"
+        f"Французские булочки 3</code>\n\n"
+        f"Каждый товар с новой строки!",
         reply_markup=CommonKeyboards.cancel(),
         parse_mode="HTML"
     )
 
 
-@products_router.message(AdminStates.add_product_quantity)
-async def add_product_quantity(message: Message, state: FSMContext):
-    """Process quantity"""
-    try:
-        quantity = int(message.text.strip())
-        if quantity < 0:
-            raise ValueError()
-    except ValueError:
-        await message.answer("❌ Введите корректное количество (целое число). Попробуйте снова:")
+@products_router.message(AdminStates.add_product_name)
+async def add_products_batch(message: Message, db: Database, user: User, bot: Bot, state: FSMContext):
+    """Process batch product creation"""
+    data = await state.get_data()
+
+    # Check if this is search mode
+    if data.get("search_mode"):
+        # Handle search
+        query = message.text.strip()
+        products = await db.search_products(query)
+
+        await state.clear()
+
+        if not products:
+            await message.answer(
+                f"🔍 По запросу '<b>{query}</b>' ничего не найдено.",
+                reply_markup=AdminKeyboards.main_menu(),
+                parse_mode="HTML"
+            )
+        else:
+            await message.answer(
+                f"🔍 Результаты поиска '<b>{query}</b>' ({len(products)} шт.):",
+                reply_markup=AdminKeyboards.products_list(products),
+                parse_mode="HTML"
+            )
         return
 
-    await state.update_data(quantity=quantity)
-    await state.set_state(AdminStates.add_product_photo)
+    # Parse products list
+    lines = message.text.strip().split("\n")
+    created_products = []
+    errors = []
 
-    await message.answer(
-        f"📊 Количество: <b>{quantity} шт.</b>\n\n"
-        f"Отправьте фото товара или нажмите 'Пропустить':",
-        reply_markup=CommonKeyboards.skip(),
-        parse_mode="HTML"
-    )
+    brand_id = data["brand_id"]
+    purchase_price = data["purchase_price"]
+    sale_price = data["sale_price"]
 
-
-@products_router.message(AdminStates.add_product_photo, F.photo)
-async def add_product_photo(message: Message, db: Database, user: User, bot: Bot, state: FSMContext):
-    """Process product photo and create product"""
-    data = await state.get_data()
-
-    # Get photo file_id
-    photo_file_id = message.photo[-1].file_id
-
-    # Create product
-    product = await db.create_product(
-        brand_id=data["brand_id"],
-        name=data["name"],
-        purchase_price=data["purchase_price"],
-        sale_price=data["sale_price"],
-        quantity=data["quantity"],
-        photo_file_id=photo_file_id
-    )
-
-    # Log creation
     logger = LoggerService(bot)
-    await logger.log_product_created(product, user)
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        # Parse line: "name quantity" or just "name" (quantity = 1)
+        parts = line.rsplit(maxsplit=1)
+
+        if len(parts) == 2:
+            name = parts[0].strip()
+            try:
+                quantity = int(parts[1])
+                if quantity < 0:
+                    raise ValueError()
+            except ValueError:
+                # Maybe the whole line is a name
+                name = line
+                quantity = 1
+        else:
+            name = line
+            quantity = 1
+
+        if len(name) < 2:
+            errors.append(f"❌ '{line}' - название слишком короткое")
+            continue
+
+        try:
+            product = await db.create_product(
+                brand_id=brand_id,
+                name=name,
+                purchase_price=purchase_price,
+                sale_price=sale_price,
+                quantity=quantity
+            )
+            created_products.append(product)
+
+            # Log creation
+            await logger.log_product_created(product, user)
+        except Exception as e:
+            errors.append(f"❌ '{name}' - ошибка: {str(e)}")
 
     await state.clear()
+
+    # Build result message
+    result_text = ""
+    if created_products:
+        result_text += f"✅ <b>Создано товаров: {len(created_products)}</b>\n\n"
+        for p in created_products:
+            result_text += f"• {p.name} ({p.quantity} шт.)\n"
+
+    if errors:
+        result_text += f"\n⚠️ <b>Ошибки:</b>\n"
+        result_text += "\n".join(errors)
+
     await message.answer(
-        f"✅ Товар успешно создан!\n\n"
-        f"{format_product(product, show_purchase_price=True)}",
+        result_text or "❌ Не удалось создать товары",
         reply_markup=AdminKeyboards.main_menu(),
         parse_mode="HTML"
     )
 
+    # Return to brand products list
+    brand = await db.get_brand_by_id(brand_id)
+    products = await db.get_products_by_brand(brand_id)
 
-@products_router.message(AdminStates.add_product_photo, F.text == "⏭ Пропустить")
-async def add_product_skip_photo(message: Message, db: Database, user: User, bot: Bot, state: FSMContext):
-    """Skip photo and create product"""
-    data = await state.get_data()
-
-    # Create product without photo
-    product = await db.create_product(
-        brand_id=data["brand_id"],
-        name=data["name"],
-        purchase_price=data["purchase_price"],
-        sale_price=data["sale_price"],
-        quantity=data["quantity"]
-    )
-
-    # Log creation
-    logger = LoggerService(bot)
-    await logger.log_product_created(product, user)
-
-    await state.clear()
     await message.answer(
-        f"✅ Товар успешно создан!\n\n"
-        f"{format_product(product, show_purchase_price=True)}",
-        reply_markup=AdminKeyboards.main_menu(),
+        f"🏷 <b>{brand.name}</b> → Товары\n\n"
+        f"Выберите товар:",
+        reply_markup=AdminKeyboards.products_list(
+            products,
+            brand_id,
+            back_callback=f"admin:brand:view:{brand_id}"
+        ),
         parse_mode="HTML"
     )
 
