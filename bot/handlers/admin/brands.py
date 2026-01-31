@@ -78,11 +78,21 @@ async def add_brand_name(message: Message, db: Database, state: FSMContext):
         return
 
     brand = await db.create_brand(category_id=category_id, name=name)
+    category = await db.get_category_by_id(category_id)
 
     await state.clear()
     await message.answer(
         f"✅ Бренд <b>{brand.name}</b> успешно создан!",
         reply_markup=AdminKeyboards.main_menu(),
+        parse_mode="HTML"
+    )
+
+    # Return to brands list
+    brands = await db.get_brands_by_category(category_id)
+    await message.answer(
+        f"📁 <b>{category.name}</b> → Бренды\n\n"
+        f"Выберите бренд:",
+        reply_markup=AdminKeyboards.brands_list(brands, category_id),
         parse_mode="HTML"
     )
 

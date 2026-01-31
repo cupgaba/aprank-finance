@@ -61,7 +61,6 @@ class AdminKeyboards:
         """Category actions"""
         builder = InlineKeyboardBuilder()
         builder.row(InlineKeyboardButton(text="🏷 Бренды категории", callback_data=f"admin:category:brands:{category_id}"))
-        builder.row(InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"admin:category:edit:{category_id}"))
         builder.row(InlineKeyboardButton(text="🗑 Удалить", callback_data=f"admin:category:delete:{category_id}"))
         builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:categories"))
         return builder.as_markup()
@@ -94,7 +93,6 @@ class AdminKeyboards:
         builder = InlineKeyboardBuilder()
         builder.row(InlineKeyboardButton(text="📦 Товары бренда", callback_data=f"admin:brand:products:{brand_id}"))
         builder.row(InlineKeyboardButton(text="➕ Добавить товар", callback_data=f"admin:add_product:{brand_id}"))
-        builder.row(InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"admin:brand:edit:{brand_id}"))
         builder.row(InlineKeyboardButton(text="🗑 Удалить", callback_data=f"admin:brand:delete:{brand_id}"))
         builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data=f"admin:category:brands:{category_id}"))
         return builder.as_markup()

@@ -135,7 +135,7 @@ async def sale_quantity_selected(
     is_admin: bool,
     state: FSMContext
 ):
-    """Quantity selected for sale"""
+    """Quantity selected for sale - ask for price"""
     if not is_admin:
         await callback.answer("⛔️ Нет доступа", show_alert=True)
         return
@@ -150,15 +150,63 @@ async def sale_quantity_selected(
         await callback.answer("❌ Недостаточно товара", show_alert=True)
         return
 
+    # Save data and ask for price
+    await state.update_data(product_id=product_id, quantity=quantity)
+    await state.set_state(AdminStates.sale_enter_price)
+
+    await callback.message.edit_text(
+        f"💰 <b>Продажа товара</b>\n\n"
+        f"Товар: {product.full_name}\n"
+        f"Количество: {quantity} шт.\n"
+        f"Стандартная цена: {format_price(product.sale_price)}\n\n"
+        f"Введите цену продажи (или отправьте <b>0</b> для стандартной цены):",
+        parse_mode="HTML"
+    )
+
+
+@sales_router.message(AdminStates.sale_enter_price)
+async def sale_price_entered(
+    message: Message,
+    db: Database,
+    user: User,
+    bot: Bot,
+    state: FSMContext
+):
+    """Sale price entered"""
+    data = await state.get_data()
+    product_id = data["product_id"]
+    quantity = data["quantity"]
+
+    product = await db.get_product_by_id(product_id)
+
+    if not product or product.quantity < quantity:
+        await message.answer("❌ Недостаточно товара", reply_markup=AdminKeyboards.main_menu())
+        await state.clear()
+        return
+
+    try:
+        price_input = message.text.strip().replace(",", ".")
+        sale_price = float(price_input)
+        if sale_price < 0:
+            raise ValueError()
+        # If 0 entered, use default price
+        if sale_price == 0:
+            sale_price = product.sale_price
+    except ValueError:
+        await message.answer("❌ Введите корректную цену (число):")
+        return
+
     # Create sale
     sale = await db.create_sale(
         product_id=product_id,
         quantity=quantity,
+        sale_price=sale_price,
         sold_by_id=user.id
     )
 
     if not sale:
-        await callback.answer("❌ Ошибка при создании продажи", show_alert=True)
+        await message.answer("❌ Ошибка при создании продажи", reply_markup=AdminKeyboards.main_menu())
+        await state.clear()
         return
 
     # Log sale
@@ -172,18 +220,15 @@ async def sale_quantity_selected(
 
     await state.clear()
 
-    await callback.message.edit_text(
+    await message.answer(
         f"✅ <b>Продажа оформлена!</b>\n\n"
         f"Товар: {product.full_name}\n"
         f"Количество: {quantity} шт.\n"
+        f"Цена за шт.: {format_price(sale.sale_price)}\n"
         f"Сумма: {format_price(sale.sale_price * quantity)}\n"
         f"Прибыль: {format_price(sale.profit)}",
+        reply_markup=AdminKeyboards.main_menu(),
         parse_mode="HTML"
-    )
-
-    await callback.message.answer(
-        "Продажа успешно сохранена.",
-        reply_markup=AdminKeyboards.main_menu()
     )
 
 
@@ -221,7 +266,7 @@ async def sale_quantity_entered(
     bot: Bot,
     state: FSMContext
 ):
-    """Custom quantity entered"""
+    """Custom quantity entered - ask for price"""
     try:
         quantity = int(message.text.strip())
         if quantity <= 0:
@@ -238,35 +283,16 @@ async def sale_quantity_entered(
         await message.answer(f"❌ Недостаточно товара. В наличии: {product.quantity} шт.")
         return
 
-    # Create sale
-    sale = await db.create_sale(
-        product_id=product_id,
-        quantity=quantity,
-        sold_by_id=user.id
-    )
-
-    if not sale:
-        await message.answer("❌ Ошибка при создании продажи")
-        return
-
-    # Log sale
-    logger = LoggerService(bot)
-    await logger.log_sale(sale, user)
-
-    # Mark as sold in channel if product is out of stock
-    if product.quantity - quantity <= 0:
-        channel_service = ChannelService(bot, db)
-        await channel_service.mark_product_sold(product_id)
-
-    await state.clear()
+    # Save data and ask for price
+    await state.update_data(quantity=quantity)
+    await state.set_state(AdminStates.sale_enter_price)
 
     await message.answer(
-        f"✅ <b>Продажа оформлена!</b>\n\n"
+        f"💰 <b>Продажа товара</b>\n\n"
         f"Товар: {product.full_name}\n"
         f"Количество: {quantity} шт.\n"
-        f"Сумма: {format_price(sale.sale_price * quantity)}\n"
-        f"Прибыль: {format_price(sale.profit)}",
-        reply_markup=AdminKeyboards.main_menu(),
+        f"Стандартная цена: {format_price(product.sale_price)}\n\n"
+        f"Введите цену продажи (или отправьте <b>0</b> для стандартной цены):",
         parse_mode="HTML"
     )
 

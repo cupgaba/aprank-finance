@@ -75,6 +75,15 @@ async def add_category_name(message: Message, db: Database, state: FSMContext):
         parse_mode="HTML"
     )
 
+    # Return to categories list
+    categories = await db.get_all_categories()
+    await message.answer(
+        "📁 <b>Категории</b>\n\n"
+        "Выберите категорию:",
+        reply_markup=AdminKeyboards.categories_list(categories),
+        parse_mode="HTML"
+    )
+
 
 @categories_router.callback_query(F.data.startswith("admin:category:view:"))
 async def view_category(callback: CallbackQuery, db: Database, is_admin: bool):
@@ -91,12 +100,21 @@ async def view_category(callback: CallbackQuery, db: Database, is_admin: bool):
         return
 
     brands = await db.get_brands_by_category(category_id)
-    brands_count = len(brands)
+
+    # Build brands list with product counts
+    brands_text = ""
+    if brands:
+        for brand in brands:
+            products = await db.get_products_by_brand(brand.id)
+            in_stock = sum(1 for p in products if p.quantity > 0)
+            brands_text += f"  🏷 {brand.name} ({in_stock} в наличии)\n"
+    else:
+        brands_text = "  Бренды не добавлены\n"
 
     await callback.message.edit_text(
         f"📁 <b>{category.name}</b>\n\n"
-        f"🏷 Брендов: {brands_count}\n"
-        f"{f'📝 {category.description}' if category.description else ''}\n\n"
+        f"<b>Бренды:</b>\n{brands_text}"
+        f"{f'📝 {category.description}' if category.description else ''}\n"
         f"Выберите действие:",
         reply_markup=AdminKeyboards.category_actions(category_id),
         parse_mode="HTML"
