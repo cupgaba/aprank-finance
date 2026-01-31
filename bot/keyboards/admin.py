@@ -37,7 +37,6 @@ class AdminKeyboards:
         """Products management menu"""
         builder = InlineKeyboardBuilder()
         builder.row(InlineKeyboardButton(text="📁 Категории", callback_data="admin:categories"))
-        builder.row(InlineKeyboardButton(text="🏷 Бренды", callback_data="admin:brands"))
         builder.row(InlineKeyboardButton(text="📦 Все товары", callback_data="admin:all_products"))
         builder.row(InlineKeyboardButton(text="➕ Добавить товар", callback_data="admin:add_product"))
         builder.row(InlineKeyboardButton(text="🔍 Поиск товара", callback_data="admin:search_product"))

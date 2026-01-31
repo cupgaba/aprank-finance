@@ -127,6 +127,21 @@ class Database:
 
     async def create_category(self, name: str, description: str = None) -> Category:
         async with self.session_factory() as session:
+            # Check if category with this name already exists (including inactive)
+            result = await session.execute(
+                select(Category).where(Category.name == name)
+            )
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                # Reactivate existing category
+                existing.is_active = True
+                if description:
+                    existing.description = description
+                await session.commit()
+                await session.refresh(existing)
+                return existing
+
             category = Category(name=name, description=description)
             session.add(category)
             await session.commit()
@@ -178,6 +193,21 @@ class Database:
 
     async def create_brand(self, category_id: int, name: str, description: str = None) -> Brand:
         async with self.session_factory() as session:
+            # Check if brand with this name already exists in category (including inactive)
+            result = await session.execute(
+                select(Brand).where(Brand.category_id == category_id, Brand.name == name)
+            )
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                # Reactivate existing brand
+                existing.is_active = True
+                if description:
+                    existing.description = description
+                await session.commit()
+                await session.refresh(existing)
+                return existing
+
             brand = Brand(category_id=category_id, name=name, description=description)
             session.add(brand)
             await session.commit()
