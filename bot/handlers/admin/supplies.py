@@ -1,5 +1,6 @@
 from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.context import FSMContext
 
 from ...database import Database
@@ -380,28 +381,93 @@ async def supply_confirm(callback: CallbackQuery, db: Database, user: User, bot:
         await callback.answer("❌ Корзина пуста", show_alert=True)
         return
 
-    # Create products
+    # Check for existing products
+    duplicates = []
+    for i, item in enumerate(items):
+        existing = await db.find_product_by_name_and_brand(item["brand_id"], item["name"])
+        if existing:
+            duplicates.append({
+                "index": i,
+                "item": item,
+                "existing": existing
+            })
+
+    # If there are duplicates, ask user what to do
+    if duplicates and not data.get("duplicates_resolved"):
+        dup_text = "⚠️ <b>Найдены существующие товары:</b>\n\n"
+        for dup in duplicates:
+            ex = dup["existing"]
+            item = dup["item"]
+            dup_text += f"• <b>{item['name']}</b> ({item['brand_name']})\n"
+            dup_text += f"  Существует: {ex.quantity} шт. по {ex.purchase_price}₽\n"
+            dup_text += f"  Новая закупка: +{item['quantity']} шт. по {item['purchase_price']}₽\n\n"
+
+        dup_text += "Что сделать с дубликатами?"
+
+        await state.update_data(duplicates=duplicates)
+
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="📦 Добавить к остаткам", callback_data="admin:supply:merge"))
+        builder.row(InlineKeyboardButton(text="🆕 Создать отдельно", callback_data="admin:supply:create_new"))
+        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:supply:back_to_cart"))
+
+        await callback.message.edit_text(dup_text, reply_markup=builder.as_markup(), parse_mode="HTML")
+        return
+
+    # Process items
     logger = LoggerService(bot)
     created_products = []
+    updated_products = []
+    supply_items = []
     products_total = 0
+
+    merge_mode = data.get("merge_duplicates", False)
 
     for item in items:
         try:
-            product = await db.create_product(
-                brand_id=item["brand_id"],
-                name=item["name"],
-                purchase_price=item["purchase_price"],
-                sale_price=item["sale_price"],
-                quantity=item["quantity"]
-            )
-            created_products.append(product)
+            existing = await db.find_product_by_name_and_brand(item["brand_id"], item["name"]) if merge_mode else None
+
+            if existing and merge_mode:
+                # Add to existing product quantity
+                old_qty = existing.quantity
+                product = await db.update_product(
+                    existing.id,
+                    quantity=existing.quantity + item["quantity"],
+                    purchase_price=item["purchase_price"],
+                    sale_price=item["sale_price"]
+                )
+                updated_products.append((product, item["quantity"]))
+                await logger.log_product_updated(product, user, "quantity", old_qty, product.quantity)
+            else:
+                # Create new product
+                product = await db.create_product(
+                    brand_id=item["brand_id"],
+                    name=item["name"],
+                    purchase_price=item["purchase_price"],
+                    sale_price=item["sale_price"],
+                    quantity=item["quantity"]
+                )
+                created_products.append(product)
+                await logger.log_product_created(product, user)
+
+            supply_items.append({
+                "product_id": product.id,
+                "quantity": item["quantity"],
+                "purchase_price": item["purchase_price"]
+            })
             products_total += item["quantity"] * item["purchase_price"]
 
-            # Log creation
-            await logger.log_product_created(product, user)
         except Exception as e:
             await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
             return
+
+    # Create supply record for history
+    await db.create_supply_record(
+        items=supply_items,
+        delivery=delivery,
+        expenses=expenses,
+        created_by_id=user.id
+    )
 
     total = products_total + delivery + expenses
 
@@ -409,9 +475,16 @@ async def supply_confirm(callback: CallbackQuery, db: Database, user: User, bot:
 
     # Format result
     result_text = f"✅ <b>Закупка оформлена!</b>\n\n"
-    result_text += f"📦 Создано товаров: {len(created_products)}\n"
-    for p in created_products:
-        result_text += f"  • {p.name} ({p.quantity} шт.)\n"
+
+    if created_products:
+        result_text += f"🆕 Создано товаров: {len(created_products)}\n"
+        for p in created_products:
+            result_text += f"  • {p.name} ({p.quantity} шт.)\n"
+
+    if updated_products:
+        result_text += f"\n📦 Пополнено товаров: {len(updated_products)}\n"
+        for p, added in updated_products:
+            result_text += f"  • {p.name} (+{added} шт. = {p.quantity} шт.)\n"
 
     result_text += f"\n📦 Товары: {format_price(products_total)}"
     if delivery > 0:
@@ -423,8 +496,56 @@ async def supply_confirm(callback: CallbackQuery, db: Database, user: User, bot:
     await callback.message.edit_text(result_text, parse_mode="HTML")
 
     await callback.message.answer(
-        "Товары добавлены в базу.",
+        "Закупка сохранена в историю.",
         reply_markup=AdminKeyboards.main_menu()
+    )
+
+
+@supplies_router.callback_query(F.data == "admin:supply:merge")
+async def supply_merge_duplicates(callback: CallbackQuery, is_admin: bool, state: FSMContext):
+    """Merge duplicates with existing products"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    await state.update_data(duplicates_resolved=True, merge_duplicates=True)
+
+    # Trigger confirm again
+    data = await state.get_data()
+    items = data.get("supply_items", [])
+    delivery = data.get("supply_delivery", 0)
+    expenses = data.get("supply_expenses", 0)
+
+    await callback.message.edit_text(
+        "📋 <b>ПОДТВЕРЖДЕНИЕ ЗАКУПКИ</b>\n\n" +
+        format_cart(items, delivery, expenses) +
+        "\n\n✅ Дубликаты будут добавлены к существующим остаткам.",
+        reply_markup=AdminKeyboards.supply_confirm(),
+        parse_mode="HTML"
+    )
+
+
+@supplies_router.callback_query(F.data == "admin:supply:create_new")
+async def supply_create_new(callback: CallbackQuery, is_admin: bool, state: FSMContext):
+    """Create new products for all items"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    await state.update_data(duplicates_resolved=True, merge_duplicates=False)
+
+    # Trigger confirm again
+    data = await state.get_data()
+    items = data.get("supply_items", [])
+    delivery = data.get("supply_delivery", 0)
+    expenses = data.get("supply_expenses", 0)
+
+    await callback.message.edit_text(
+        "📋 <b>ПОДТВЕРЖДЕНИЕ ЗАКУПКИ</b>\n\n" +
+        format_cart(items, delivery, expenses) +
+        "\n\n🆕 Все товары будут созданы как отдельные позиции.",
+        reply_markup=AdminKeyboards.supply_confirm(),
+        parse_mode="HTML"
     )
 
 

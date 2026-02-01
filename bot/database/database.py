@@ -380,6 +380,54 @@ class Database:
 
     # ==================== SUPPLY METHODS ====================
 
+    async def find_product_by_name_and_brand(self, brand_id: int, name: str) -> Optional[Product]:
+        """Find existing product by name and brand"""
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(Product).where(
+                    Product.brand_id == brand_id,
+                    Product.name == name,
+                    Product.is_available == True
+                )
+            )
+            return result.scalar_one_or_none()
+
+    async def create_supply_record(
+        self,
+        items: List[dict],
+        delivery: float = 0,
+        expenses: float = 0,
+        created_by_id: int = None
+    ) -> Supply:
+        """
+        Create a supply record for history.
+        items: list of dicts with keys: product_id, quantity, purchase_price
+        """
+        async with self.session_factory() as session:
+            products_total = sum(item["quantity"] * item["purchase_price"] for item in items)
+            total_amount = products_total + delivery + expenses
+
+            supply = Supply(
+                total_amount=total_amount,
+                notes=f"Доставка: {delivery}₽, Расходы: {expenses}₽" if delivery or expenses else None,
+                created_by_id=created_by_id
+            )
+            session.add(supply)
+            await session.flush()
+
+            for item_data in items:
+                supply_item = SupplyItem(
+                    supply_id=supply.id,
+                    product_id=item_data["product_id"],
+                    quantity=item_data["quantity"],
+                    purchase_price=item_data["purchase_price"]
+                )
+                session.add(supply_item)
+
+            await session.commit()
+            await session.refresh(supply)
+            return supply
+
     async def create_supply(
         self,
         items: List[dict],
