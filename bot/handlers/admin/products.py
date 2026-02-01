@@ -20,7 +20,7 @@ async def list_all_products(callback: CallbackQuery, db: Database, is_admin: boo
         await callback.answer("⛔️ Нет доступа", show_alert=True)
         return
 
-    products = await db.get_all_products()
+    products = await db.get_all_products_with_relations()
 
     if not products:
         await callback.message.edit_text(
@@ -33,9 +33,27 @@ async def list_all_products(callback: CallbackQuery, db: Database, is_admin: boo
         await callback.message.edit_text(
             f"📦 <b>Все товары</b> ({len(products)} шт.)\n\n"
             "Выберите товар:",
-            reply_markup=AdminKeyboards.products_list(products),
+            reply_markup=AdminKeyboards.products_list(products, page=0, show_category=True),
             parse_mode="HTML"
         )
+
+
+@products_router.callback_query(F.data.startswith("admin:products_page:"))
+async def products_page(callback: CallbackQuery, db: Database, is_admin: bool):
+    """Products pagination"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    page = int(callback.data.split(":")[-1])
+    products = await db.get_all_products_with_relations()
+
+    await callback.message.edit_text(
+        f"📦 <b>Все товары</b> ({len(products)} шт.)\n\n"
+        "Выберите товар:",
+        reply_markup=AdminKeyboards.products_list(products, page=page, show_category=True),
+        parse_mode="HTML"
+    )
 
 
 @products_router.callback_query(F.data == "admin:add_product")

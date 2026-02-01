@@ -566,13 +566,13 @@ async def supply_cancel(callback: CallbackQuery, is_admin: bool, state: FSMConte
 
 
 @supplies_router.callback_query(F.data == "admin:supply:history")
-async def supply_history(callback: CallbackQuery, db: Database, is_admin: bool):
+async def supply_history(callback: CallbackQuery, db: Database, is_admin: bool, state: FSMContext):
     """Show supply history"""
     if not is_admin:
         await callback.answer("⛔️ Нет доступа", show_alert=True)
         return
 
-    supplies = await db.get_supplies(limit=20)
+    supplies = await db.get_supplies(limit=100)
 
     if not supplies:
         await callback.message.edit_text(
@@ -583,14 +583,66 @@ async def supply_history(callback: CallbackQuery, db: Database, is_admin: bool):
         )
         return
 
-    text = "📥 <b>История закупок</b>\n\n"
-    for supply in supplies:
-        date = supply.created_at.strftime("%d.%m.%Y %H:%M")
-        items_count = len(supply.items)
-        text += f"📦 {date} - {items_count} поз. - {format_price(supply.total_amount)}\n"
+    # Save supplies to state for pagination
+    await state.update_data(supply_history_ids=[s.id for s in supplies])
+
+    await callback.message.edit_text(
+        "📥 <b>История закупок</b>\n\n"
+        "Выберите закупку для просмотра:",
+        reply_markup=AdminKeyboards.supply_history_list(supplies, page=0),
+        parse_mode="HTML"
+    )
+
+
+@supplies_router.callback_query(F.data.startswith("admin:supply:page:"))
+async def supply_history_page(callback: CallbackQuery, db: Database, is_admin: bool):
+    """Supply history pagination"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    page = int(callback.data.split(":")[-1])
+    supplies = await db.get_supplies(limit=100)
+
+    await callback.message.edit_text(
+        "📥 <b>История закупок</b>\n\n"
+        "Выберите закупку для просмотра:",
+        reply_markup=AdminKeyboards.supply_history_list(supplies, page=page),
+        parse_mode="HTML"
+    )
+
+
+@supplies_router.callback_query(F.data.startswith("admin:supply:view:"))
+async def supply_view_detail(callback: CallbackQuery, db: Database, is_admin: bool):
+    """View supply details"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    supply_id = int(callback.data.split(":")[-1])
+    supply = await db.get_supply_by_id(supply_id)
+
+    if not supply:
+        await callback.answer("❌ Закупка не найдена", show_alert=True)
+        return
+
+    date = supply.created_at.strftime("%d.%m.%Y %H:%M")
+    text = f"📦 <b>Закупка от {date}</b>\n\n"
+
+    if supply.items:
+        for item in supply.items:
+            product_name = item.product.name if item.product else "Удалён"
+            brand_name = item.product.brand.name if item.product and item.product.brand else ""
+            text += f"• {brand_name} | {product_name}\n"
+            text += f"  {item.quantity} шт. × {item.purchase_price}₽ = {format_price(item.quantity * item.purchase_price)}\n"
+
+    text += f"\n💰 <b>Итого: {format_price(supply.total_amount)}</b>"
+
+    if supply.notes:
+        text += f"\n📝 {supply.notes}"
 
     await callback.message.edit_text(
         text,
-        reply_markup=AdminKeyboards.supplies_menu(),
+        reply_markup=AdminKeyboards.supply_detail_back(),
         parse_mode="HTML"
     )

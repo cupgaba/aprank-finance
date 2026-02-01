@@ -309,6 +309,19 @@ class Database:
             result = await session.execute(query)
             return result.scalars().all()
 
+    async def get_all_products_with_relations(self) -> Sequence[Product]:
+        """Get all products with brand and category loaded"""
+        from sqlalchemy.orm import selectinload
+        async with self.session_factory() as session:
+            query = (
+                select(Product)
+                .where(Product.is_available == True)
+                .options(selectinload(Product.brand).selectinload(Brand.category))
+                .order_by(Product.name)
+            )
+            result = await session.execute(query)
+            return result.scalars().all()
+
     async def get_product_by_id(self, product_id: int) -> Optional[Product]:
         async with self.session_factory() as session:
             result = await session.execute(

@@ -102,16 +102,42 @@ class AdminKeyboards:
         products: Sequence[Product],
         brand_id: Optional[int] = None,
         action: str = "view",
-        back_callback: str = "admin:products_menu"
+        back_callback: str = "admin:products_menu",
+        page: int = 0,
+        per_page: int = 10,
+        show_category: bool = False
     ) -> InlineKeyboardMarkup:
-        """List of products"""
+        """List of products with pagination"""
         builder = InlineKeyboardBuilder()
-        for product in products:
+
+        # Pagination
+        total = len(products)
+        start = page * per_page
+        end = start + per_page
+        page_products = products[start:end]
+
+        for product in page_products:
             status = "✅" if product.quantity > 0 else "❌"
+            if show_category and hasattr(product, 'brand') and product.brand:
+                cat_name = product.brand.category.name if hasattr(product.brand, 'category') else ""
+                text = f"{status} {cat_name} | {product.name} ({product.quantity} шт.)"
+            else:
+                text = f"{status} {product.name} ({product.quantity} шт.)"
             builder.row(InlineKeyboardButton(
-                text=f"{status} {product.name} ({product.quantity} шт.)",
+                text=text,
                 callback_data=f"admin:product:{action}:{product.id}"
             ))
+
+        # Pagination buttons
+        if total > per_page:
+            nav_buttons = []
+            if page > 0:
+                nav_buttons.append(InlineKeyboardButton(text="◀️", callback_data=f"admin:products_page:{page-1}"))
+            nav_buttons.append(InlineKeyboardButton(text=f"{page+1}/{(total-1)//per_page+1}", callback_data="noop"))
+            if end < total:
+                nav_buttons.append(InlineKeyboardButton(text="▶️", callback_data=f"admin:products_page:{page+1}"))
+            builder.row(*nav_buttons)
+
         if brand_id:
             builder.row(InlineKeyboardButton(
                 text="➕ Добавить товар",
@@ -178,6 +204,44 @@ class AdminKeyboards:
         builder = InlineKeyboardBuilder()
         builder.row(InlineKeyboardButton(text="✅ Подтвердить", callback_data="admin:supply:confirm"))
         builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:supply:back_to_cart"))
+        return builder.as_markup()
+
+    @staticmethod
+    def supply_history_list(supplies: Sequence, page: int = 0, per_page: int = 10) -> InlineKeyboardMarkup:
+        """Supply history with pagination"""
+        builder = InlineKeyboardBuilder()
+
+        total = len(supplies)
+        start = page * per_page
+        end = start + per_page
+        page_supplies = supplies[start:end]
+
+        for supply in page_supplies:
+            date = supply.created_at.strftime("%d.%m %H:%M")
+            items_count = len(supply.items) if hasattr(supply, 'items') and supply.items else 0
+            builder.row(InlineKeyboardButton(
+                text=f"📦 {date} - {items_count} поз. - {supply.total_amount:.0f}₽",
+                callback_data=f"admin:supply:view:{supply.id}"
+            ))
+
+        # Pagination buttons
+        if total > per_page:
+            nav_buttons = []
+            if page > 0:
+                nav_buttons.append(InlineKeyboardButton(text="◀️", callback_data=f"admin:supply:page:{page-1}"))
+            nav_buttons.append(InlineKeyboardButton(text=f"{page+1}/{(total-1)//per_page+1}", callback_data="noop"))
+            if end < total:
+                nav_buttons.append(InlineKeyboardButton(text="▶️", callback_data=f"admin:supply:page:{page+1}"))
+            builder.row(*nav_buttons)
+
+        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:supplies_menu"))
+        return builder.as_markup()
+
+    @staticmethod
+    def supply_detail_back() -> InlineKeyboardMarkup:
+        """Back from supply detail"""
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="◀️ К списку закупок", callback_data="admin:supply:history"))
         return builder.as_markup()
 
     # ==================== SALES ====================
