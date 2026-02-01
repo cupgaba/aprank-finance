@@ -159,12 +159,25 @@ class AdminKeyboards:
         return builder.as_markup()
 
     @staticmethod
-    def supply_add_more() -> InlineKeyboardMarkup:
-        """Add more items to supply"""
+    def supply_cart(has_items: bool = False, delivery: float = 0, expenses: float = 0) -> InlineKeyboardMarkup:
+        """Supply cart actions"""
         builder = InlineKeyboardBuilder()
-        builder.row(InlineKeyboardButton(text="➕ Добавить ещё товар", callback_data="admin:supply:add_item"))
-        builder.row(InlineKeyboardButton(text="✅ Завершить закупку", callback_data="admin:supply:finish"))
+        builder.row(InlineKeyboardButton(text="➕ Добавить товары", callback_data="admin:supply:add_item"))
+        if has_items:
+            delivery_text = f"🚚 Доставка: {delivery}₽" if delivery > 0 else "🚚 Добавить доставку"
+            expenses_text = f"📋 Расходы: {expenses}₽" if expenses > 0 else "📋 Добавить расходы"
+            builder.row(InlineKeyboardButton(text=delivery_text, callback_data="admin:supply:delivery"))
+            builder.row(InlineKeyboardButton(text=expenses_text, callback_data="admin:supply:expenses"))
+            builder.row(InlineKeyboardButton(text="✅ Завершить закупку", callback_data="admin:supply:finish"))
         builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="admin:supply:cancel"))
+        return builder.as_markup()
+
+    @staticmethod
+    def supply_confirm() -> InlineKeyboardMarkup:
+        """Confirm supply"""
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="✅ Подтвердить", callback_data="admin:supply:confirm"))
+        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:supply:back_to_cart"))
         return builder.as_markup()
 
     # ==================== SALES ====================

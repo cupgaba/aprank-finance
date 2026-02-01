@@ -27,12 +27,10 @@ class AdminStates(StatesGroup):
     # Supply states
     supply_select_category = State()
     supply_select_brand = State()
-    supply_select_product = State()
-    supply_enter_quantity = State()
-    supply_enter_price = State()
-    supply_add_more = State()
-    supply_enter_supplier = State()
-    supply_enter_notes = State()
+    supply_enter_products = State()
+    supply_enter_delivery = State()
+    supply_enter_expenses = State()
+    supply_confirm = State()
 
     # Sale states
     sale_select_category = State()
