@@ -24,7 +24,8 @@ def format_cart(items: list, delivery: float = 0, expenses: float = 0) -> str:
     for item in items:
         subtotal = item["quantity"] * item["purchase_price"]
         products_total += subtotal
-        text += f"• {item['name']} x{item['quantity']} по {item['purchase_price']}₽ = {format_price(subtotal)}\n"
+        cat_brand = f"({item.get('category_name', '')} | {item['brand_name']})"
+        text += f"• {cat_brand} {item['name']} x{item['quantity']} по {item['purchase_price']}₽ = {format_price(subtotal)}\n"
         text += f"  └ Продажа: {item['sale_price']}₽\n"
 
     text += f"\n📦 Товары: {format_price(products_total)}"
@@ -149,6 +150,7 @@ async def supply_products_entered(message: Message, db: Database, state: FSMCont
     items = data.get("supply_items", [])
 
     brand = await db.get_brand_by_id(brand_id)
+    category = await db.get_category_by_id(brand.category_id)
 
     lines = message.text.strip().split("\n")
     added = 0
@@ -183,6 +185,7 @@ async def supply_products_entered(message: Message, db: Database, state: FSMCont
             items.append({
                 "brand_id": brand_id,
                 "brand_name": brand.name,
+                "category_name": category.name,
                 "name": name,
                 "purchase_price": purchase_price,
                 "sale_price": sale_price,
