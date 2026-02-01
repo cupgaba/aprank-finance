@@ -127,11 +127,11 @@ async def supply_brand_selected(callback: CallbackQuery, db: Database, is_admin:
     await callback.message.edit_text(
         f"📥 <b>Добавление товаров в {brand.name}</b>\n\n"
         f"Введите товары списком в формате:\n"
-        f"<code>название | закупка | продажа | кол-во</code>\n\n"
+        f"<code>название закупка продажа кол-во</code>\n\n"
         f"<b>Пример:</b>\n"
-        f"<code>Красная смородина | 140 | 250 | 5\n"
-        f"Кислое мороженое | 150 | 280 | 3\n"
-        f"Манго | 140 | 250 | 10</code>\n\n"
+        f"<code>Красная смородина 140 250 5\n"
+        f"Кислое мороженое 150 280 3\n"
+        f"Манго 140 250 10</code>\n\n"
         f"Каждый товар с новой строки!",
         parse_mode="HTML"
     )
@@ -159,28 +159,17 @@ async def supply_products_entered(message: Message, db: Database, state: FSMCont
         if not line:
             continue
 
-        # Parse: name | purchase | sale | quantity
-        parts = [p.strip() for p in line.split("|")]
+        # Parse: name purchase sale quantity (last 3 are numbers)
+        parts = line.rsplit(maxsplit=3)
 
         if len(parts) < 4:
-            # Try simpler format: name quantity (use existing prices)
-            simple_parts = line.rsplit(maxsplit=1)
-            if len(simple_parts) == 2:
-                try:
-                    name = simple_parts[0].strip()
-                    qty = int(simple_parts[1])
-                    # Need purchase and sale prices
-                    errors.append(f"❌ '{name}' - укажите цены в формате: название | закупка | продажа | кол-во")
-                    continue
-                except ValueError:
-                    pass
-            errors.append(f"❌ '{line}' - неверный формат")
+            errors.append(f"❌ '{line}' - формат: название закупка продажа кол-во")
             continue
 
         try:
             name = parts[0].strip()
-            purchase_price = float(parts[1].replace(",", ".").replace(" ", ""))
-            sale_price = float(parts[2].replace(",", ".").replace(" ", ""))
+            purchase_price = float(parts[1].replace(",", "."))
+            sale_price = float(parts[2].replace(",", "."))
             quantity = int(parts[3])
 
             if len(name) < 2:
@@ -201,7 +190,7 @@ async def supply_products_entered(message: Message, db: Database, state: FSMCont
             })
             added += 1
 
-        except (ValueError, IndexError) as e:
+        except (ValueError, IndexError):
             errors.append(f"❌ '{line}' - ошибка парсинга")
             continue
 
