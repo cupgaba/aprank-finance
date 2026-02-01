@@ -75,22 +75,21 @@ async def supply_add_item(callback: CallbackQuery, db: Database, is_admin: bool,
         await callback.answer("❌ Сначала создайте категории", show_alert=True)
         return
 
-    await state.set_state(AdminStates.supply_select_category)
-
     await callback.message.edit_text(
         "📥 <b>Добавление товаров в закупку</b>\n\n"
         "Выберите категорию:",
-        reply_markup=AdminKeyboards.select_category_for_product(categories),
+        reply_markup=AdminKeyboards.select_category_for_supply(categories),
         parse_mode="HTML"
     )
 
 
-@supplies_router.callback_query(
-    AdminStates.supply_select_category,
-    F.data.startswith("admin:product:select_cat:")
-)
-async def supply_category_selected(callback: CallbackQuery, db: Database, state: FSMContext):
+@supplies_router.callback_query(F.data.startswith("admin:supply:select_cat:"))
+async def supply_category_selected(callback: CallbackQuery, db: Database, is_admin: bool, state: FSMContext):
     """Category selected for supply"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
     category_id = int(callback.data.split(":")[-1])
     brands = await db.get_brands_by_category(category_id)
 
@@ -98,23 +97,23 @@ async def supply_category_selected(callback: CallbackQuery, db: Database, state:
         await callback.answer("❌ В этой категории нет брендов", show_alert=True)
         return
 
-    await state.set_state(AdminStates.supply_select_brand)
     await state.update_data(supply_category_id=category_id)
 
     await callback.message.edit_text(
         "📥 <b>Добавление товаров в закупку</b>\n\n"
         "Выберите бренд:",
-        reply_markup=AdminKeyboards.select_brand_for_product(brands),
+        reply_markup=AdminKeyboards.select_brand_for_supply(brands, category_id),
         parse_mode="HTML"
     )
 
 
-@supplies_router.callback_query(
-    AdminStates.supply_select_brand,
-    F.data.startswith("admin:product:select_brand:")
-)
-async def supply_brand_selected(callback: CallbackQuery, db: Database, state: FSMContext):
+@supplies_router.callback_query(F.data.startswith("admin:supply:select_brand:"))
+async def supply_brand_selected(callback: CallbackQuery, db: Database, is_admin: bool, state: FSMContext):
     """Brand selected - ask for products list"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
     brand_id = int(callback.data.split(":")[-1])
     brand = await db.get_brand_by_id(brand_id)
 

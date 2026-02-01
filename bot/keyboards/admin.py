@@ -333,3 +333,29 @@ class AdminKeyboards:
             ))
         builder.row(InlineKeyboardButton(text="❌ Отмена", callback_data="admin:products_menu"))
         return builder.as_markup()
+
+    # ==================== SUPPLY SELECTION ====================
+
+    @staticmethod
+    def select_category_for_supply(categories: Sequence[Category]) -> InlineKeyboardMarkup:
+        """Select category for supply"""
+        builder = InlineKeyboardBuilder()
+        for cat in categories:
+            builder.row(InlineKeyboardButton(
+                text=f"📁 {cat.name}",
+                callback_data=f"admin:supply:select_cat:{cat.id}"
+            ))
+        builder.row(InlineKeyboardButton(text="◀️ Назад в корзину", callback_data="admin:supply:back_to_cart"))
+        return builder.as_markup()
+
+    @staticmethod
+    def select_brand_for_supply(brands: Sequence[Brand], category_id: int) -> InlineKeyboardMarkup:
+        """Select brand for supply"""
+        builder = InlineKeyboardBuilder()
+        for brand in brands:
+            builder.row(InlineKeyboardButton(
+                text=f"🏷 {brand.name}",
+                callback_data=f"admin:supply:select_brand:{brand.id}"
+            ))
+        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:supply:add_item"))
+        return builder.as_markup()
