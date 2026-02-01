@@ -112,14 +112,21 @@ async def view_brand(callback: CallbackQuery, db: Database, is_admin: bool):
         return
 
     products = await db.get_products_by_brand(brand_id)
-    products_count = len(products)
-    in_stock = sum(1 for p in products if p.quantity > 0)
+
+    # Build products list
+    products_text = ""
+    if products:
+        for p in products:
+            status = "✅" if p.quantity > 0 else "❌"
+            products_text += f"  {status} {p.name} ({p.quantity} шт.) - закуп. {p.purchase_price}₽\n"
+    else:
+        products_text = "  Товары не добавлены\n"
 
     await callback.message.edit_text(
         f"🏷 <b>{brand.name}</b>\n\n"
-        f"📁 Категория: {brand.category.name}\n"
-        f"📦 Товаров: {products_count} (в наличии: {in_stock})\n"
-        f"{f'📝 {brand.description}' if brand.description else ''}\n\n"
+        f"📁 Категория: {brand.category.name}\n\n"
+        f"<b>Товары:</b>\n{products_text}"
+        f"{f'📝 {brand.description}' if brand.description else ''}\n"
         f"Выберите действие:",
         reply_markup=AdminKeyboards.brand_actions(brand_id, brand.category_id),
         parse_mode="HTML"
