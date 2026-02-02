@@ -225,7 +225,7 @@ async def sale_price_entered(
         f"Цена за шт.: {format_price(sale.sale_price)}\n"
         f"Сумма: {format_price(sale.sale_price * quantity)}\n"
         f"Прибыль: {format_price(sale.profit)}",
-        reply_markup=AdminKeyboards.main_menu(),
+        reply_markup=AdminKeyboards.sales_menu(),
         parse_mode="HTML"
     )
 
@@ -315,15 +315,21 @@ async def quick_sell_product(callback: CallbackQuery, db: Database, is_admin: bo
 
     await state.update_data(product_id=product_id)
 
-    await callback.message.edit_text(
+    text = (
         f"💰 <b>Продажа товара</b>\n\n"
         f"Товар: {product.full_name}\n"
         f"Цена: {format_price(product.sale_price)}\n"
         f"В наличии: {product.quantity} шт.\n\n"
-        f"Выберите количество:",
-        reply_markup=AdminKeyboards.sale_quantity(product_id, product.quantity),
-        parse_mode="HTML"
+        f"Выберите количество:"
     )
+    keyboard = AdminKeyboards.sale_quantity(product_id, product.quantity)
+
+    # Handle message with photo
+    if callback.message.photo:
+        await callback.message.delete()
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+    else:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
 
 
 @sales_router.callback_query(F.data == "admin:sale:today")

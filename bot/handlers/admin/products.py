@@ -371,13 +371,18 @@ async def edit_sale_price_start(callback: CallbackQuery, db: Database, is_admin:
     await state.set_state(AdminStates.edit_product_sale_price)
     await state.update_data(product_id=product_id, old_price=product.sale_price)
 
-    await callback.message.edit_text(
+    text = (
         f"✏️ <b>Изменение цены продажи</b>\n\n"
         f"Товар: {product.full_name}\n"
         f"Текущая цена: {product.sale_price}₽\n\n"
-        f"Введите новую цену:",
-        parse_mode="HTML"
+        f"Введите новую цену:"
     )
+
+    if callback.message.photo:
+        await callback.message.delete()
+        await callback.message.answer(text, parse_mode="HTML")
+    else:
+        await callback.message.edit_text(text, parse_mode="HTML")
 
 
 @products_router.message(AdminStates.edit_product_sale_price)
@@ -402,13 +407,22 @@ async def edit_sale_price(message: Message, db: Database, user: User, bot: Bot, 
     await logger.log_product_updated(product, user, "sale_price", old_price, price)
 
     await state.clear()
-    await message.answer(
-        f"✅ Цена продажи изменена!\n\n"
-        f"Товар: {product.full_name}\n"
-        f"Новая цена: {price}₽",
-        reply_markup=AdminKeyboards.main_menu(),
-        parse_mode="HTML"
-    )
+
+    # Show updated product card
+    text = format_product(product, show_purchase_price=True)
+    if product.photo_file_id:
+        await message.answer_photo(
+            photo=product.photo_file_id,
+            caption=f"✅ Цена продажи изменена на {price}₽\n\n{text}",
+            reply_markup=AdminKeyboards.product_actions(product),
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            f"✅ Цена продажи изменена на {price}₽\n\n{text}",
+            reply_markup=AdminKeyboards.product_actions(product),
+            parse_mode="HTML"
+        )
 
 
 @products_router.callback_query(F.data.startswith("admin:product:edit_purchase_price:"))
@@ -428,13 +442,18 @@ async def edit_purchase_price_start(callback: CallbackQuery, db: Database, is_ad
     await state.set_state(AdminStates.edit_product_purchase_price)
     await state.update_data(product_id=product_id, old_price=product.purchase_price)
 
-    await callback.message.edit_text(
+    text = (
         f"✏️ <b>Изменение цены закупки</b>\n\n"
         f"Товар: {product.full_name}\n"
         f"Текущая цена: {product.purchase_price}₽\n\n"
-        f"Введите новую цену:",
-        parse_mode="HTML"
+        f"Введите новую цену:"
     )
+
+    if callback.message.photo:
+        await callback.message.delete()
+        await callback.message.answer(text, parse_mode="HTML")
+    else:
+        await callback.message.edit_text(text, parse_mode="HTML")
 
 
 @products_router.message(AdminStates.edit_product_purchase_price)
@@ -459,13 +478,22 @@ async def edit_purchase_price(message: Message, db: Database, user: User, bot: B
     await logger.log_product_updated(product, user, "purchase_price", old_price, price)
 
     await state.clear()
-    await message.answer(
-        f"✅ Цена закупки изменена!\n\n"
-        f"Товар: {product.full_name}\n"
-        f"Новая цена: {price}₽",
-        reply_markup=AdminKeyboards.main_menu(),
-        parse_mode="HTML"
-    )
+
+    # Show updated product card
+    text = format_product(product, show_purchase_price=True)
+    if product.photo_file_id:
+        await message.answer_photo(
+            photo=product.photo_file_id,
+            caption=f"✅ Цена закупки изменена на {price}₽\n\n{text}",
+            reply_markup=AdminKeyboards.product_actions(product),
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            f"✅ Цена закупки изменена на {price}₽\n\n{text}",
+            reply_markup=AdminKeyboards.product_actions(product),
+            parse_mode="HTML"
+        )
 
 
 @products_router.callback_query(F.data.startswith("admin:product:edit_quantity:"))
@@ -485,13 +513,18 @@ async def edit_quantity_start(callback: CallbackQuery, db: Database, is_admin: b
     await state.set_state(AdminStates.edit_product_quantity)
     await state.update_data(product_id=product_id, old_quantity=product.quantity)
 
-    await callback.message.edit_text(
+    text = (
         f"✏️ <b>Изменение остатка</b>\n\n"
         f"Товар: {product.full_name}\n"
         f"Текущий остаток: {product.quantity} шт.\n\n"
-        f"Введите новое количество:",
-        parse_mode="HTML"
+        f"Введите новое количество:"
     )
+
+    if callback.message.photo:
+        await callback.message.delete()
+        await callback.message.answer(text, parse_mode="HTML")
+    else:
+        await callback.message.edit_text(text, parse_mode="HTML")
 
 
 @products_router.message(AdminStates.edit_product_quantity)
@@ -516,13 +549,22 @@ async def edit_quantity(message: Message, db: Database, user: User, bot: Bot, st
     await logger.log_product_updated(product, user, "quantity", old_quantity, quantity)
 
     await state.clear()
-    await message.answer(
-        f"✅ Остаток изменён!\n\n"
-        f"Товар: {product.full_name}\n"
-        f"Новый остаток: {quantity} шт.",
-        reply_markup=AdminKeyboards.main_menu(),
-        parse_mode="HTML"
-    )
+
+    # Show updated product card
+    text = format_product(product, show_purchase_price=True)
+    if product.photo_file_id:
+        await message.answer_photo(
+            photo=product.photo_file_id,
+            caption=f"✅ Остаток изменён на {quantity} шт.\n\n{text}",
+            reply_markup=AdminKeyboards.product_actions(product),
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            f"✅ Остаток изменён на {quantity} шт.\n\n{text}",
+            reply_markup=AdminKeyboards.product_actions(product),
+            parse_mode="HTML"
+        )
 
 
 @products_router.callback_query(F.data.startswith("admin:product:edit_photo:"))
@@ -542,12 +584,17 @@ async def edit_photo_start(callback: CallbackQuery, db: Database, is_admin: bool
     await state.set_state(AdminStates.edit_product_photo)
     await state.update_data(product_id=product_id)
 
-    await callback.message.edit_text(
+    text = (
         f"🖼 <b>Изменение фото</b>\n\n"
         f"Товар: {product.full_name}\n\n"
-        f"Отправьте новое фото:",
-        parse_mode="HTML"
+        f"Отправьте новое фото:"
     )
+
+    if callback.message.photo:
+        await callback.message.delete()
+        await callback.message.answer(text, parse_mode="HTML")
+    else:
+        await callback.message.edit_text(text, parse_mode="HTML")
 
 
 @products_router.message(AdminStates.edit_product_photo, F.photo)
@@ -560,10 +607,13 @@ async def edit_photo(message: Message, db: Database, state: FSMContext):
     product = await db.update_product(product_id, photo_file_id=photo_file_id)
 
     await state.clear()
-    await message.answer(
-        f"✅ Фото обновлено!\n\n"
-        f"Товар: {product.full_name}",
-        reply_markup=AdminKeyboards.main_menu(),
+
+    # Show updated product card with new photo
+    text = format_product(product, show_purchase_price=True)
+    await message.answer_photo(
+        photo=product.photo_file_id,
+        caption=f"✅ Фото обновлено!\n\n{text}",
+        reply_markup=AdminKeyboards.product_actions(product),
         parse_mode="HTML"
     )
 
