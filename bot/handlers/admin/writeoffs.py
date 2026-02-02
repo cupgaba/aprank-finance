@@ -26,22 +26,21 @@ async def new_writeoff_start(callback: CallbackQuery, db: Database, is_admin: bo
         await callback.answer("❌ Нет категорий", show_alert=True)
         return
 
-    await state.set_state(AdminStates.writeoff_select_category)
-
     await callback.message.edit_text(
         "📤 <b>Новое списание</b>\n\n"
         "Выберите категорию товара:",
-        reply_markup=AdminKeyboards.select_category_for_product(categories),
+        reply_markup=AdminKeyboards.select_category_for_writeoff(categories),
         parse_mode="HTML"
     )
 
 
-@writeoffs_router.callback_query(
-    AdminStates.writeoff_select_category,
-    F.data.startswith("admin:product:select_cat:")
-)
-async def writeoff_category_selected(callback: CallbackQuery, db: Database, state: FSMContext):
+@writeoffs_router.callback_query(F.data.startswith("admin:writeoff:select_cat:"))
+async def writeoff_category_selected(callback: CallbackQuery, db: Database, is_admin: bool, state: FSMContext):
     """Category selected for write-off"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
     category_id = int(callback.data.split(":")[-1])
     brands = await db.get_brands_by_category(category_id)
 
@@ -49,22 +48,21 @@ async def writeoff_category_selected(callback: CallbackQuery, db: Database, stat
         await callback.answer("❌ В этой категории нет брендов", show_alert=True)
         return
 
-    await state.set_state(AdminStates.writeoff_select_brand)
-
     await callback.message.edit_text(
         "📤 <b>Новое списание</b>\n\n"
         "Выберите бренд:",
-        reply_markup=AdminKeyboards.select_brand_for_product(brands),
+        reply_markup=AdminKeyboards.select_brand_for_writeoff(brands),
         parse_mode="HTML"
     )
 
 
-@writeoffs_router.callback_query(
-    AdminStates.writeoff_select_brand,
-    F.data.startswith("admin:product:select_brand:")
-)
-async def writeoff_brand_selected(callback: CallbackQuery, db: Database, state: FSMContext):
+@writeoffs_router.callback_query(F.data.startswith("admin:writeoff:select_brand:"))
+async def writeoff_brand_selected(callback: CallbackQuery, db: Database, is_admin: bool, state: FSMContext):
     """Brand selected for write-off"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
     brand_id = int(callback.data.split(":")[-1])
     products = await db.get_products_by_brand(brand_id)
 

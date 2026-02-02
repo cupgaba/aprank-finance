@@ -423,3 +423,55 @@ class AdminKeyboards:
             ))
         builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:supply:add_item"))
         return builder.as_markup()
+
+    # ==================== SALE SELECTION ====================
+
+    @staticmethod
+    def select_category_for_sale(categories: Sequence[Category]) -> InlineKeyboardMarkup:
+        """Select category for sale"""
+        builder = InlineKeyboardBuilder()
+        for cat in categories:
+            builder.row(InlineKeyboardButton(
+                text=f"📁 {cat.name}",
+                callback_data=f"admin:sale:select_cat:{cat.id}"
+            ))
+        builder.row(InlineKeyboardButton(text="❌ Отмена", callback_data="admin:sales_menu"))
+        return builder.as_markup()
+
+    @staticmethod
+    def select_brand_for_sale(brands: Sequence[Brand]) -> InlineKeyboardMarkup:
+        """Select brand for sale"""
+        builder = InlineKeyboardBuilder()
+        for brand in brands:
+            builder.row(InlineKeyboardButton(
+                text=f"🏷 {brand.name}",
+                callback_data=f"admin:sale:select_brand:{brand.id}"
+            ))
+        builder.row(InlineKeyboardButton(text="❌ Отмена", callback_data="admin:sales_menu"))
+        return builder.as_markup()
+
+    # ==================== WRITEOFF SELECTION ====================
+
+    @staticmethod
+    def select_category_for_writeoff(categories: Sequence[Category]) -> InlineKeyboardMarkup:
+        """Select category for writeoff"""
+        builder = InlineKeyboardBuilder()
+        for cat in categories:
+            builder.row(InlineKeyboardButton(
+                text=f"📁 {cat.name}",
+                callback_data=f"admin:writeoff:select_cat:{cat.id}"
+            ))
+        builder.row(InlineKeyboardButton(text="❌ Отмена", callback_data="admin:writeoffs_menu"))
+        return builder.as_markup()
+
+    @staticmethod
+    def select_brand_for_writeoff(brands: Sequence[Brand]) -> InlineKeyboardMarkup:
+        """Select brand for writeoff"""
+        builder = InlineKeyboardBuilder()
+        for brand in brands:
+            builder.row(InlineKeyboardButton(
+                text=f"🏷 {brand.name}",
+                callback_data=f"admin:writeoff:select_brand:{brand.id}"
+            ))
+        builder.row(InlineKeyboardButton(text="❌ Отмена", callback_data="admin:writeoffs_menu"))
+        return builder.as_markup()
