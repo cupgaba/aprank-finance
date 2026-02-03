@@ -168,10 +168,12 @@ class AdminKeyboards:
         """Statistics menu"""
         builder = InlineKeyboardBuilder()
         builder.row(InlineKeyboardButton(text="📈 Сегодня", callback_data="admin:stats:today"))
-        builder.row(InlineKeyboardButton(text="📊 Неделя", callback_data="admin:stats:week"))
-        builder.row(InlineKeyboardButton(text="📉 Месяц", callback_data="admin:stats:month"))
-        builder.row(InlineKeyboardButton(text="📋 Топ товаров", callback_data="admin:stats:top"))
-        builder.row(InlineKeyboardButton(text="📦 Остатки", callback_data="admin:stats:stock"))
+        builder.row(InlineKeyboardButton(text="📊 Эта неделя", callback_data="admin:stats:this_week"))
+        builder.row(InlineKeyboardButton(text="📊 Прошлая неделя", callback_data="admin:stats:last_week"))
+        builder.row(InlineKeyboardButton(text="📉 Этот месяц", callback_data="admin:stats:this_month"))
+        builder.row(InlineKeyboardButton(text="📉 Прошлый месяц", callback_data="admin:stats:last_month"))
+        builder.row(InlineKeyboardButton(text="📋 За всё время", callback_data="admin:stats:all_time"))
+        builder.row(InlineKeyboardButton(text="📦 Остатки на складе", callback_data="admin:stats:stock"))
         return builder.as_markup()
 
     # ==================== SUPPLIES ====================

@@ -624,6 +624,129 @@ class Database:
             )
             return result.scalars().all()
 
+    async def get_write_offs_by_period(
+        self,
+        start_date: datetime,
+        end_date: datetime = None
+    ) -> Sequence[WriteOff]:
+        """Get write-offs for a period"""
+        async with self.session_factory() as session:
+            query = select(WriteOff).where(WriteOff.created_at >= start_date)
+            if end_date:
+                query = query.where(WriteOff.created_at <= end_date)
+            query = query.order_by(WriteOff.created_at.desc())
+            result = await session.execute(query)
+            return result.scalars().all()
+
+    async def get_supplies_by_period(
+        self,
+        start_date: datetime,
+        end_date: datetime = None
+    ) -> Sequence[Supply]:
+        """Get supplies for a period"""
+        async with self.session_factory() as session:
+            query = select(Supply).where(Supply.created_at >= start_date)
+            if end_date:
+                query = query.where(Supply.created_at <= end_date)
+            query = query.order_by(Supply.created_at.desc())
+            result = await session.execute(query)
+            return result.scalars().all()
+
+    async def get_full_statistics(
+        self,
+        start_date: datetime = None,
+        end_date: datetime = None
+    ) -> dict:
+        """Get comprehensive statistics for a period"""
+        async with self.session_factory() as session:
+            # Sales
+            sales_query = select(Sale)
+            if start_date:
+                sales_query = sales_query.where(Sale.sold_at >= start_date)
+            if end_date:
+                sales_query = sales_query.where(Sale.sold_at <= end_date)
+            result = await session.execute(sales_query)
+            sales = result.scalars().all()
+
+            total_revenue = sum(s.sale_price * s.quantity for s in sales)
+            total_cost = sum(s.purchase_price * s.quantity for s in sales)
+            total_profit = total_revenue - total_cost
+            total_items_sold = sum(s.quantity for s in sales)
+
+            # Top products by quantity sold
+            product_sales = {}
+            for sale in sales:
+                pid = sale.product_id
+                if pid not in product_sales:
+                    product_sales[pid] = {
+                        "product": sale.product,
+                        "quantity": 0,
+                        "revenue": 0,
+                        "profit": 0
+                    }
+                product_sales[pid]["quantity"] += sale.quantity
+                product_sales[pid]["revenue"] += sale.sale_price * sale.quantity
+                product_sales[pid]["profit"] += sale.profit
+
+            top_products = sorted(
+                product_sales.values(),
+                key=lambda x: x["quantity"],
+                reverse=True
+            )[:5]
+
+            # Supplies
+            supplies_query = select(Supply)
+            if start_date:
+                supplies_query = supplies_query.where(Supply.created_at >= start_date)
+            if end_date:
+                supplies_query = supplies_query.where(Supply.created_at <= end_date)
+            result = await session.execute(supplies_query)
+            supplies = result.scalars().all()
+
+            total_supply_amount = sum(s.total_amount for s in supplies)
+            total_supply_items = sum(
+                sum(item.quantity for item in s.items) if s.items else 0
+                for s in supplies
+            )
+
+            # Write-offs
+            writeoffs_query = select(WriteOff)
+            if start_date:
+                writeoffs_query = writeoffs_query.where(WriteOff.created_at >= start_date)
+            if end_date:
+                writeoffs_query = writeoffs_query.where(WriteOff.created_at <= end_date)
+            result = await session.execute(writeoffs_query)
+            writeoffs = result.scalars().all()
+
+            total_writeoff_items = sum(w.quantity for w in writeoffs)
+            total_writeoff_loss = sum(w.quantity * w.product.purchase_price for w in writeoffs)
+
+            # Writeoff reasons breakdown
+            writeoff_reasons = {}
+            for w in writeoffs:
+                reason = w.reason
+                if reason not in writeoff_reasons:
+                    writeoff_reasons[reason] = {"count": 0, "quantity": 0, "loss": 0}
+                writeoff_reasons[reason]["count"] += 1
+                writeoff_reasons[reason]["quantity"] += w.quantity
+                writeoff_reasons[reason]["loss"] += w.quantity * w.product.purchase_price
+
+            return {
+                "sales_count": len(sales),
+                "total_items_sold": total_items_sold,
+                "total_revenue": total_revenue,
+                "total_cost": total_cost,
+                "total_profit": total_profit,
+                "top_products": top_products,
+                "supplies_count": len(supplies),
+                "total_supply_amount": total_supply_amount,
+                "total_supply_items": total_supply_items,
+                "writeoffs_count": len(writeoffs),
+                "total_writeoff_items": total_writeoff_items,
+                "total_writeoff_loss": total_writeoff_loss,
+                "writeoff_reasons": writeoff_reasons,
+            }
+
     # ==================== RESERVATION METHODS ====================
 
     async def create_reservation(
