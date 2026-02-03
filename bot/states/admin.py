@@ -31,6 +31,8 @@ class AdminStates(StatesGroup):
     supply_enter_delivery = State()
     supply_enter_expenses = State()
     supply_confirm = State()
+    supply_add_category_name = State()
+    supply_add_brand_name = State()
 
     # Sale states
     sale_select_category = State()

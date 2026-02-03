@@ -409,6 +409,7 @@ class AdminKeyboards:
                 text=f"📁 {cat.name}",
                 callback_data=f"admin:supply:select_cat:{cat.id}"
             ))
+        builder.row(InlineKeyboardButton(text="➕ Создать категорию", callback_data="admin:supply:add_category"))
         builder.row(InlineKeyboardButton(text="◀️ Назад в корзину", callback_data="admin:supply:back_to_cart"))
         return builder.as_markup()
 
@@ -421,6 +422,7 @@ class AdminKeyboards:
                 text=f"🏷 {brand.name}",
                 callback_data=f"admin:supply:select_brand:{brand.id}"
             ))
+        builder.row(InlineKeyboardButton(text="➕ Создать бренд", callback_data=f"admin:supply:add_brand:{category_id}"))
         builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:supply:add_item"))
         return builder.as_markup()
 

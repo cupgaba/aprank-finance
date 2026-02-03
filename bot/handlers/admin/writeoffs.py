@@ -8,7 +8,7 @@ from ...keyboards.admin import AdminKeyboards
 from ...keyboards.common import CommonKeyboards
 from ...states.admin import AdminStates
 from ...services.logger import LoggerService
-from ...utils.formatting import format_writeoff_reason, format_price
+from ...utils.formatting import format_writeoff_reason, format_price, format_product
 
 writeoffs_router = Router()
 
@@ -88,12 +88,13 @@ async def writeoff_brand_selected(callback: CallbackQuery, db: Database, is_admi
     )
 
 
-@writeoffs_router.callback_query(
-    AdminStates.writeoff_select_product,
-    F.data.startswith("admin:product:writeoff:")
-)
-async def writeoff_product_selected(callback: CallbackQuery, db: Database, state: FSMContext):
-    """Product selected for write-off"""
+@writeoffs_router.callback_query(F.data.startswith("admin:product:writeoff:"))
+async def writeoff_product_selected(callback: CallbackQuery, db: Database, is_admin: bool, state: FSMContext):
+    """Product selected for write-off (from product card or writeoffs menu)"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
     product_id = int(callback.data.split(":")[-1])
     product = await db.get_product_by_id(product_id)
 
@@ -105,17 +106,25 @@ async def writeoff_product_selected(callback: CallbackQuery, db: Database, state
         await callback.answer("❌ Товар отсутствует на складе", show_alert=True)
         return
 
-    await state.update_data(product_id=product_id)
+    # Check if we came from product card (no writeoff state was set before)
+    current_state = await state.get_state()
+    from_card = current_state != AdminStates.writeoff_select_product
+
+    await state.update_data(product_id=product_id, from_card=from_card)
     await state.set_state(AdminStates.writeoff_select_reason)
 
-    await callback.message.edit_text(
+    text = (
         f"📤 <b>Списание товара</b>\n\n"
         f"Товар: {product.full_name}\n"
         f"В наличии: {product.quantity} шт.\n\n"
-        f"Выберите причину списания:",
-        reply_markup=AdminKeyboards.writeoff_reason(),
-        parse_mode="HTML"
+        f"Выберите причину списания:"
     )
+
+    if callback.message.photo:
+        await callback.message.delete()
+        await callback.message.answer(text, reply_markup=AdminKeyboards.writeoff_reason(), parse_mode="HTML")
+    else:
+        await callback.message.edit_text(text, reply_markup=AdminKeyboards.writeoff_reason(), parse_mode="HTML")
 
 
 @writeoffs_router.callback_query(
@@ -207,21 +216,44 @@ async def writeoff_notes_entered(
     logger = LoggerService(bot)
     await logger.log_writeoff(writeoff, user)
 
+    from_card = data.get("from_card", False)
     await state.clear()
 
     product = await db.get_product_by_id(data["product_id"])
     loss = data["quantity"] * product.purchase_price
 
-    await message.answer(
-        f"✅ <b>Списание оформлено!</b>\n\n"
-        f"Товар: {product.full_name}\n"
-        f"Причина: {format_writeoff_reason(data['reason'])}\n"
-        f"Количество: {data['quantity']} шт.\n"
-        f"Убыток: {format_price(loss)}\n"
-        f"{'📝 ' + notes if notes else ''}",
-        reply_markup=AdminKeyboards.main_menu(),
-        parse_mode="HTML"
-    )
+    if from_card and product:
+        # Return to product card
+        text = format_product(product, show_purchase_price=True)
+        result_text = (
+            f"✅ Списано: {product.full_name} x{data['quantity']}\n"
+            f"Убыток: {format_price(loss)}\n\n"
+            f"{text}"
+        )
+        if product.photo_file_id:
+            await message.answer_photo(
+                photo=product.photo_file_id,
+                caption=result_text,
+                reply_markup=AdminKeyboards.product_actions(product),
+                parse_mode="HTML"
+            )
+        else:
+            await message.answer(
+                result_text,
+                reply_markup=AdminKeyboards.product_actions(product),
+                parse_mode="HTML"
+            )
+    else:
+        await message.answer(
+            f"✅ <b>Списание оформлено!</b>\n\n"
+            f"Товар: {product.full_name}\n"
+            f"Причина: {format_writeoff_reason(data['reason'])}\n"
+            f"Количество: {data['quantity']} шт.\n"
+            f"Убыток: {format_price(loss)}\n"
+            f"{'📝 ' + notes if notes else ''}",
+            reply_markup=AdminKeyboards.writeoffs_menu(),
+            parse_mode="HTML"
+        )
 
 
 @writeoffs_router.callback_query(F.data == "admin:writeoff:history")

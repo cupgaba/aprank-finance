@@ -73,13 +73,9 @@ async def supply_add_item(callback: CallbackQuery, db: Database, is_admin: bool,
 
     categories = await db.get_all_categories()
 
-    if not categories:
-        await callback.answer("❌ Сначала создайте категории", show_alert=True)
-        return
-
     await callback.message.edit_text(
         "📥 <b>Добавление товаров в закупку</b>\n\n"
-        "Выберите категорию:",
+        f"{'Выберите категорию:' if categories else 'Категорий пока нет. Создайте первую!'}",
         reply_markup=AdminKeyboards.select_category_for_supply(categories),
         parse_mode="HTML"
     )
@@ -95,15 +91,11 @@ async def supply_category_selected(callback: CallbackQuery, db: Database, is_adm
     category_id = int(callback.data.split(":")[-1])
     brands = await db.get_brands_by_category(category_id)
 
-    if not brands:
-        await callback.answer("❌ В этой категории нет брендов", show_alert=True)
-        return
-
     await state.update_data(supply_category_id=category_id)
 
     await callback.message.edit_text(
         "📥 <b>Добавление товаров в закупку</b>\n\n"
-        "Выберите бренд:",
+        f"{'Выберите бренд:' if brands else 'Брендов пока нет. Создайте первый!'}",
         reply_markup=AdminKeyboards.select_brand_for_supply(brands, category_id),
         parse_mode="HTML"
     )
@@ -644,5 +636,95 @@ async def supply_view_detail(callback: CallbackQuery, db: Database, is_admin: bo
     await callback.message.edit_text(
         text,
         reply_markup=AdminKeyboards.supply_detail_back(),
+        parse_mode="HTML"
+    )
+
+
+@supplies_router.callback_query(F.data == "admin:supply:add_category")
+async def supply_add_category_start(callback: CallbackQuery, is_admin: bool, state: FSMContext):
+    """Start adding category from supply flow"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    await state.set_state(AdminStates.supply_add_category_name)
+
+    await callback.message.edit_text(
+        "📁 <b>Создание категории</b>\n\n"
+        "Введите название категории:",
+        parse_mode="HTML"
+    )
+
+
+@supplies_router.message(AdminStates.supply_add_category_name)
+async def supply_add_category_name(message: Message, db: Database, state: FSMContext):
+    """Process category name in supply flow"""
+    name = message.text.strip()
+
+    if len(name) < 2:
+        await message.answer("❌ Название должно быть не менее 2 символов. Попробуйте снова:")
+        return
+
+    await db.create_category(name=name)
+    await state.set_state(None)
+
+    categories = await db.get_all_categories()
+
+    await message.answer(
+        f"✅ Категория <b>{name}</b> создана!\n\n"
+        "📥 <b>Добавление товаров в закупку</b>\n\n"
+        "Выберите категорию:",
+        reply_markup=AdminKeyboards.select_category_for_supply(categories),
+        parse_mode="HTML"
+    )
+
+
+@supplies_router.callback_query(F.data.startswith("admin:supply:add_brand:"))
+async def supply_add_brand_start(callback: CallbackQuery, db: Database, is_admin: bool, state: FSMContext):
+    """Start adding brand from supply flow"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    category_id = int(callback.data.split(":")[-1])
+    category = await db.get_category_by_id(category_id)
+
+    if not category:
+        await callback.answer("❌ Категория не найдена", show_alert=True)
+        return
+
+    await state.set_state(AdminStates.supply_add_brand_name)
+    await state.update_data(supply_new_brand_category_id=category_id)
+
+    await callback.message.edit_text(
+        f"🏷 <b>Создание бренда</b>\n\n"
+        f"Категория: {category.name}\n\n"
+        f"Введите название бренда:",
+        parse_mode="HTML"
+    )
+
+
+@supplies_router.message(AdminStates.supply_add_brand_name)
+async def supply_add_brand_name(message: Message, db: Database, state: FSMContext):
+    """Process brand name in supply flow"""
+    name = message.text.strip()
+
+    if len(name) < 2:
+        await message.answer("❌ Название должно быть не менее 2 символов. Попробуйте снова:")
+        return
+
+    data = await state.get_data()
+    category_id = data.get("supply_new_brand_category_id")
+
+    await db.create_brand(category_id=category_id, name=name)
+    await state.set_state(None)
+
+    brands = await db.get_brands_by_category(category_id)
+
+    await message.answer(
+        f"✅ Бренд <b>{name}</b> создан!\n\n"
+        "📥 <b>Добавление товаров в закупку</b>\n\n"
+        "Выберите бренд:",
+        reply_markup=AdminKeyboards.select_brand_for_supply(brands, category_id),
         parse_mode="HTML"
     )

@@ -10,7 +10,7 @@ from ...keyboards.common import CommonKeyboards
 from ...states.admin import AdminStates
 from ...services.logger import LoggerService
 from ...services.channel import ChannelService
-from ...utils.formatting import format_price
+from ...utils.formatting import format_price, format_product
 
 sales_router = Router()
 
@@ -216,18 +216,43 @@ async def sale_price_entered(
         channel_service = ChannelService(bot, db)
         await channel_service.mark_product_sold(product_id)
 
+    from_card = data.get("from_card", False)
     await state.clear()
 
-    await message.answer(
-        f"✅ <b>Продажа оформлена!</b>\n\n"
-        f"Товар: {product.full_name}\n"
-        f"Количество: {quantity} шт.\n"
-        f"Цена за шт.: {format_price(sale.sale_price)}\n"
-        f"Сумма: {format_price(sale.sale_price * quantity)}\n"
-        f"Прибыль: {format_price(sale.profit)}",
-        reply_markup=AdminKeyboards.sales_menu(),
-        parse_mode="HTML"
-    )
+    # Reload product with updated quantity
+    product = await db.get_product_by_id(product_id)
+
+    if from_card and product:
+        # Return to product card
+        text = format_product(product, show_purchase_price=True)
+        result_text = (
+            f"✅ Продажа: {product.full_name} x{quantity} = {format_price(sale.sale_price * quantity)}\n\n"
+            f"{text}"
+        )
+        if product.photo_file_id:
+            await message.answer_photo(
+                photo=product.photo_file_id,
+                caption=result_text,
+                reply_markup=AdminKeyboards.product_actions(product),
+                parse_mode="HTML"
+            )
+        else:
+            await message.answer(
+                result_text,
+                reply_markup=AdminKeyboards.product_actions(product),
+                parse_mode="HTML"
+            )
+    else:
+        await message.answer(
+            f"✅ <b>Продажа оформлена!</b>\n\n"
+            f"Товар: {product.full_name}\n"
+            f"Количество: {quantity} шт.\n"
+            f"Цена за шт.: {format_price(sale.sale_price)}\n"
+            f"Сумма: {format_price(sale.sale_price * quantity)}\n"
+            f"Прибыль: {format_price(sale.profit)}",
+            reply_markup=AdminKeyboards.sales_menu(),
+            parse_mode="HTML"
+        )
 
 
 @sales_router.callback_query(F.data.startswith("admin:sale:qty_custom:"))
@@ -313,7 +338,7 @@ async def quick_sell_product(callback: CallbackQuery, db: Database, is_admin: bo
         await callback.answer("❌ Товар закончился", show_alert=True)
         return
 
-    await state.update_data(product_id=product_id)
+    await state.update_data(product_id=product_id, from_card=True)
 
     text = (
         f"💰 <b>Продажа товара</b>\n\n"
@@ -395,15 +420,16 @@ async def sales_history(callback: CallbackQuery, db: Database, is_admin: bool):
     # Group by date
     by_date = {}
     for sale in sales:
-        date_key = sale.sold_at.strftime("%d.%m.%Y")
-        if date_key not in by_date:
-            by_date[date_key] = {"sales": [], "revenue": 0, "profit": 0}
-        by_date[date_key]["sales"].append(sale)
-        by_date[date_key]["revenue"] += sale.sale_price * sale.quantity
-        by_date[date_key]["profit"] += sale.profit
+        date_obj = sale.sold_at.date()
+        if date_obj not in by_date:
+            by_date[date_obj] = {"sales": [], "revenue": 0, "profit": 0}
+        by_date[date_obj]["sales"].append(sale)
+        by_date[date_obj]["revenue"] += sale.sale_price * sale.quantity
+        by_date[date_obj]["profit"] += sale.profit
 
-    for date, data in sorted(by_date.items(), reverse=True):
-        text += f"📅 <b>{date}</b>\n"
+    for date_obj, data in sorted(by_date.items(), reverse=True):
+        date_str = date_obj.strftime("%d.%m.%Y")
+        text += f"📅 <b>{date_str}</b>\n"
         text += f"   Продаж: {len(data['sales'])}, Выручка: {format_price(data['revenue'])}\n\n"
 
     await callback.message.edit_text(
