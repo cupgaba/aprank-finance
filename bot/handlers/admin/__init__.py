@@ -10,6 +10,7 @@ from .writeoffs import writeoffs_router
 from .statistics import statistics_router
 from .publications import publications_router
 from .reservations import reservations_router
+from .settings import settings_router
 
 admin_router = Router()
 
@@ -24,3 +25,4 @@ admin_router.include_router(writeoffs_router)
 admin_router.include_router(statistics_router)
 admin_router.include_router(publications_router)
 admin_router.include_router(reservations_router)
+admin_router.include_router(settings_router)

@@ -1,5 +1,5 @@
 from .database import Database, get_db
-from .models import Base, User, Category, Brand, Product, Supply, SupplyItem, Sale, WriteOff, Reservation, ChannelPost
+from .models import Base, User, Category, Brand, Product, Supply, SupplyItem, Sale, WriteOff, Reservation, ChannelPost, BotSettings
 
 __all__ = [
     "Database",
@@ -15,4 +15,5 @@ __all__ = [
     "WriteOff",
     "Reservation",
     "ChannelPost",
+    "BotSettings",
 ]

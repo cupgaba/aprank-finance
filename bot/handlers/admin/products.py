@@ -222,7 +222,7 @@ async def add_products_batch(message: Message, db: Database, user: User, bot: Bo
     purchase_price = data["purchase_price"]
     sale_price = data["sale_price"]
 
-    logger = LoggerService(bot)
+    logger = LoggerService(bot, db)
 
     for line in lines:
         line = line.strip()
@@ -381,7 +381,7 @@ async def edit_sale_price(message: Message, db: Database, user: User, bot: Bot, 
     product = await db.update_product(product_id, sale_price=price)
 
     # Log change
-    logger = LoggerService(bot)
+    logger = LoggerService(bot, db)
     await logger.log_product_updated(product, user, "sale_price", old_price, price)
 
     await state.clear()
@@ -452,7 +452,7 @@ async def edit_purchase_price(message: Message, db: Database, user: User, bot: B
     product = await db.update_product(product_id, purchase_price=price)
 
     # Log change
-    logger = LoggerService(bot)
+    logger = LoggerService(bot, db)
     await logger.log_product_updated(product, user, "purchase_price", old_price, price)
 
     await state.clear()
@@ -523,7 +523,7 @@ async def edit_quantity(message: Message, db: Database, user: User, bot: Bot, st
     product = await db.update_product(product_id, quantity=quantity)
 
     # Log change
-    logger = LoggerService(bot)
+    logger = LoggerService(bot, db)
     await logger.log_product_updated(product, user, "quantity", old_quantity, quantity)
 
     await state.clear()
@@ -613,7 +613,7 @@ async def delete_product(callback: CallbackQuery, db: Database, user: User, bot:
     brand_id = product.brand_id
 
     # Log deletion
-    logger = LoggerService(bot)
+    logger = LoggerService(bot, db)
     await logger.log_product_deleted(product, user)
 
     await db.delete_product(product_id)
@@ -643,7 +643,8 @@ async def low_stock_products(callback: CallbackQuery, db: Database, is_admin: bo
         await callback.answer("⛔️ Нет доступа", show_alert=True)
         return
 
-    products = await db.get_low_stock_products(threshold=3)
+    s = await db.get_settings()
+    products = await db.get_low_stock_products(threshold=s.low_stock_threshold)
 
     if not products:
         await callback.message.edit_text(
@@ -655,7 +656,7 @@ async def low_stock_products(callback: CallbackQuery, db: Database, is_admin: bo
     else:
         await callback.message.edit_text(
             f"⚠️ <b>Мало на складе</b> ({len(products)} позиций)\n\n"
-            "Товары с остатком 3 шт. и менее:",
+            f"Товары с остатком {s.low_stock_threshold} шт. и менее:",
             reply_markup=AdminKeyboards.products_list(products),
             parse_mode="HTML"
         )

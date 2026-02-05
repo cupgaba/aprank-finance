@@ -208,7 +208,7 @@ async def sale_price_entered(
         return
 
     # Log sale
-    logger = LoggerService(bot)
+    logger = LoggerService(bot, db)
     await logger.log_sale(sale, user)
 
     # Mark as sold in channel if product is out of stock

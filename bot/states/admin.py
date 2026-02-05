@@ -61,7 +61,6 @@ class AdminStates(StatesGroup):
     publish_confirm = State()
 
     # Settings states
-    settings_add_admin = State()
-    settings_channel_id = State()
-    settings_log_channel_id = State()
     settings_reminder_time = State()
+    settings_low_stock_custom = State()
+    settings_reservation_custom = State()

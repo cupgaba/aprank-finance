@@ -216,6 +216,30 @@ class Reservation(Base):
         return datetime.utcnow() > self.expires_at and self.status == ReservationStatus.ACTIVE
 
 
+class BotSettings(Base):
+    __tablename__ = "bot_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # Logging toggles
+    log_sales: Mapped[bool] = mapped_column(Boolean, default=True)
+    log_supplies: Mapped[bool] = mapped_column(Boolean, default=True)
+    log_writeoffs: Mapped[bool] = mapped_column(Boolean, default=True)
+    log_products: Mapped[bool] = mapped_column(Boolean, default=True)
+    log_reservations: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Reminder settings
+    reminder_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    reminder_hour: Mapped[int] = mapped_column(Integer, default=23)
+    reminder_minute: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Stock settings
+    low_stock_threshold: Mapped[int] = mapped_column(Integer, default=3)
+
+    # Reservation settings
+    reservation_hours: Mapped[int] = mapped_column(Integer, default=24)
+
+
 class ChannelPost(Base):
     __tablename__ = "channel_posts"
 

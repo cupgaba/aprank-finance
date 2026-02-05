@@ -6,7 +6,7 @@ import os
 
 from .models import (
     Base, User, Category, Brand, Product, Supply, SupplyItem,
-    Sale, WriteOff, Reservation, ChannelPost, UserRole, ReservationStatus, WriteOffReason
+    Sale, WriteOff, Reservation, ChannelPost, BotSettings, UserRole, ReservationStatus, WriteOffReason
 )
 from ..config import settings
 
@@ -941,6 +941,36 @@ class Database:
                 await session.commit()
                 await session.refresh(post)
             return post
+
+
+    # ==================== SETTINGS METHODS ====================
+
+    async def get_settings(self) -> BotSettings:
+        """Get or create bot settings (singleton row)"""
+        async with self.session_factory() as session:
+            result = await session.execute(select(BotSettings).where(BotSettings.id == 1))
+            s = result.scalar_one_or_none()
+            if not s:
+                s = BotSettings(id=1)
+                session.add(s)
+                await session.commit()
+                await session.refresh(s)
+            return s
+
+    async def update_settings(self, **kwargs) -> BotSettings:
+        """Update bot settings"""
+        async with self.session_factory() as session:
+            result = await session.execute(select(BotSettings).where(BotSettings.id == 1))
+            s = result.scalar_one_or_none()
+            if not s:
+                s = BotSettings(id=1)
+                session.add(s)
+            for key, value in kwargs.items():
+                if hasattr(s, key):
+                    setattr(s, key, value)
+            await session.commit()
+            await session.refresh(s)
+            return s
 
 
 # Global database instance

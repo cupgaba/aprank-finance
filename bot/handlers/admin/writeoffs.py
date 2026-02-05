@@ -213,7 +213,7 @@ async def writeoff_notes_entered(
         return
 
     # Log write-off
-    logger = LoggerService(bot)
+    logger = LoggerService(bot, db)
     await logger.log_writeoff(writeoff, user)
 
     from_card = data.get("from_card", False)

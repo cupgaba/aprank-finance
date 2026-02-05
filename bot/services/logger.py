@@ -9,14 +9,25 @@ from ..database.models import User, Product, Sale, WriteOff, Reservation, Supply
 class LoggerService:
     """Service for logging changes to a Telegram channel"""
 
-    def __init__(self, bot: Bot):
+    def __init__(self, bot: Bot, db=None):
         self.bot = bot
+        self.db = db
         self.log_channel_id = settings.LOG_CHANNEL_ID
 
-    async def _send_log(self, message: str):
+    async def _send_log(self, message: str, log_type: Optional[str] = None):
         """Send log message to log channel"""
         if not self.log_channel_id:
             return
+
+        # Check if this log type is enabled in settings
+        if self.db and log_type:
+            try:
+                bot_settings = await self.db.get_settings()
+                flag = getattr(bot_settings, log_type, True)
+                if not flag:
+                    return
+            except Exception:
+                pass
 
         try:
             await self.bot.send_message(
@@ -38,7 +49,7 @@ class LoggerService:
             f"👤 Админ: {admin.full_name}\n"
             f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
         )
-        await self._send_log(message)
+        await self._send_log(message, "log_products")
 
     async def log_product_updated(
         self,
@@ -64,7 +75,7 @@ class LoggerService:
             f"👤 Админ: {admin.full_name}\n"
             f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
         )
-        await self._send_log(message)
+        await self._send_log(message, "log_products")
 
     async def log_product_deleted(self, product: Product, admin: User):
         """Log product deletion"""
@@ -74,7 +85,7 @@ class LoggerService:
             f"👤 Админ: {admin.full_name}\n"
             f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
         )
-        await self._send_log(message)
+        await self._send_log(message, "log_products")
 
     async def log_sale(self, sale: Sale, admin: Optional[User] = None):
         """Log sale"""
@@ -89,7 +100,7 @@ class LoggerService:
         if admin:
             message += f"👤 Админ: {admin.full_name}\n"
         message += f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-        await self._send_log(message)
+        await self._send_log(message, "log_sales")
 
     async def log_supply(self, supply: Supply, admin: Optional[User] = None):
         """Log supply"""
@@ -108,7 +119,7 @@ class LoggerService:
         if admin:
             message += f"\n👤 Админ: {admin.full_name}\n"
         message += f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-        await self._send_log(message)
+        await self._send_log(message, "log_supplies")
 
     async def log_writeoff(self, writeoff: WriteOff, admin: Optional[User] = None):
         """Log write-off"""
@@ -132,7 +143,7 @@ class LoggerService:
         if admin:
             message += f"\n👤 Админ: {admin.full_name}\n"
         message += f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-        await self._send_log(message)
+        await self._send_log(message, "log_writeoffs")
 
     async def log_reservation_created(self, reservation: Reservation):
         """Log reservation creation"""
@@ -151,7 +162,7 @@ class LoggerService:
         if user.phone:
             message += f"📱 {user.phone}\n"
         message += f"\n🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-        await self._send_log(message)
+        await self._send_log(message, "log_reservations")
 
     async def log_reservation_completed(self, reservation: Reservation, admin: User):
         """Log reservation completion"""
@@ -164,7 +175,7 @@ class LoggerService:
             f"👤 Админ: {admin.full_name}\n"
             f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
         )
-        await self._send_log(message)
+        await self._send_log(message, "log_reservations")
 
     async def log_reservation_cancelled(self, reservation: Reservation, admin: Optional[User] = None):
         """Log reservation cancellation"""
@@ -178,7 +189,7 @@ class LoggerService:
         if admin:
             message += f"\n👤 Админ: {admin.full_name}\n"
         message += f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-        await self._send_log(message)
+        await self._send_log(message, "log_reservations")
 
     async def log_admin_added(self, new_admin: User, by_admin: User):
         """Log admin addition"""

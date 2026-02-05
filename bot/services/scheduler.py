@@ -71,6 +71,11 @@ class SchedulerService:
     async def _send_sales_reminder(self):
         """Send reminder to admins to enter daily sales"""
         try:
+            # Check if reminders are enabled
+            bot_settings = await self.db.get_settings()
+            if not bot_settings.reminder_enabled:
+                return
+
             admins = await self.db.get_all_admins()
 
             message = (

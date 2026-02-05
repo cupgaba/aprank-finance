@@ -116,7 +116,7 @@ async def complete_reservation(
     await db.complete_reservation(reservation_id)
 
     # Log completion
-    logger = LoggerService(bot)
+    logger = LoggerService(bot, db)
     await logger.log_reservation_completed(reservation, user)
 
     await callback.answer("✅ Резерв завершён")
@@ -167,7 +167,7 @@ async def cancel_reservation(
     await db.cancel_reservation(reservation_id)
 
     # Log cancellation
-    logger = LoggerService(bot)
+    logger = LoggerService(bot, db)
     await logger.log_reservation_cancelled(reservation, user)
 
     # Notify user about cancellation

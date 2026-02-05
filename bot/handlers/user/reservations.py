@@ -46,10 +46,11 @@ async def reserve_product_start(callback: CallbackQuery, db: Database, user: Use
 
     await state.update_data(product_id=product_id)
 
+    s = await db.get_settings()
     text = (
         f"📌 <b>Резервирование товара</b>\n\n"
         f"{format_product(product)}\n\n"
-        f"⏰ Резерв действует {settings.RESERVATION_HOURS} часов.\n\n"
+        f"⏰ Резерв действует {s.reservation_hours} часов.\n\n"
         f"Подтвердить резервирование?"
     )
 
@@ -91,10 +92,11 @@ async def confirm_reservation(callback: CallbackQuery, db: Database, user: User,
         return
 
     # Create reservation
+    s = await db.get_settings()
     reservation = await db.create_reservation(
         product_id=product_id,
         user_id=user.id,
-        hours=settings.RESERVATION_HOURS
+        hours=s.reservation_hours
     )
 
     if not reservation:
@@ -109,7 +111,7 @@ async def confirm_reservation(callback: CallbackQuery, db: Database, user: User,
     await scheduler.notify_new_reservation(reservation)
 
     # Log reservation
-    logger = LoggerService(bot)
+    logger = LoggerService(bot, db)
     await logger.log_reservation_created(reservation)
 
     await callback.message.edit_text(
@@ -144,10 +146,11 @@ async def process_contact(message: Message, db: Database, user: User, bot: Bot, 
     await db.set_user_phone(user.telegram_id, phone)
 
     # Create reservation
+    s = await db.get_settings()
     reservation = await db.create_reservation(
         product_id=product_id,
         user_id=user.id,
-        hours=settings.RESERVATION_HOURS
+        hours=s.reservation_hours
     )
 
     if not reservation:
@@ -165,7 +168,7 @@ async def process_contact(message: Message, db: Database, user: User, bot: Bot, 
     await scheduler.notify_new_reservation(reservation)
 
     # Log reservation
-    logger = LoggerService(bot)
+    logger = LoggerService(bot, db)
     await logger.log_reservation_created(reservation)
 
     await message.answer(
@@ -213,7 +216,7 @@ async def cancel_reservation(callback: CallbackQuery, db: Database, user: User):
 
     # Log
     bot = callback.bot
-    logger = LoggerService(bot)
+    logger = LoggerService(bot, db)
     await logger.log_reservation_cancelled(reservation)
 
     await callback.answer("✅ Резерв отменён")

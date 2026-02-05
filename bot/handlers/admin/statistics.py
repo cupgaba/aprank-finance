@@ -191,6 +191,7 @@ async def stats_stock(callback: CallbackQuery, db: Database, is_admin: bool):
         return
 
     products = await db.get_all_products()
+    s = await db.get_settings()
 
     if not products:
         await callback.message.edit_text(
@@ -206,9 +207,10 @@ async def stats_stock(callback: CallbackQuery, db: Database, is_admin: bool):
     total_value = sum(p.quantity * p.sale_price for p in products)
     potential_profit = total_value - total_cost
 
+    threshold = s.low_stock_threshold
     in_stock = sum(1 for p in products if p.quantity > 0)
     out_of_stock = sum(1 for p in products if p.quantity == 0)
-    low_stock = sum(1 for p in products if 0 < p.quantity <= 3)
+    low_stock = sum(1 for p in products if 0 < p.quantity <= threshold)
 
     # Group by category
     by_category = {}
@@ -224,7 +226,7 @@ async def stats_stock(callback: CallbackQuery, db: Database, is_admin: bool):
         f"📦 <b>Остатки на складе</b>\n\n"
         f"📊 Всего позиций: {len(products)}\n"
         f"✅ В наличии: {in_stock}\n"
-        f"⚠️ Мало (3 шт.): {low_stock}\n"
+        f"⚠️ Мало ({threshold} шт.): {low_stock}\n"
         f"❌ Нет в наличии: {out_of_stock}\n\n"
         f"📦 Всего единиц: {total_items} шт.\n"
         f"💵 Себестоимость: {format_price(total_cost)}\n"

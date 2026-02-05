@@ -2,7 +2,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 from typing import Sequence, Optional
 
-from ..database.models import Category, Brand, Product, Reservation, WriteOffReason
+from ..database.models import Category, Brand, Product, Reservation, WriteOffReason, BotSettings
 
 
 class AdminKeyboards:
@@ -360,9 +360,84 @@ class AdminKeyboards:
     def settings_menu() -> InlineKeyboardMarkup:
         """Settings menu"""
         builder = InlineKeyboardBuilder()
-        builder.row(InlineKeyboardButton(text="👥 Управление админами", callback_data="admin:settings:admins"))
-        builder.row(InlineKeyboardButton(text="📢 Настройки канала", callback_data="admin:settings:channel"))
+        builder.row(InlineKeyboardButton(text="📋 Настройка логирования", callback_data="admin:settings:logging"))
         builder.row(InlineKeyboardButton(text="⏰ Настройки напоминаний", callback_data="admin:settings:reminders"))
+        builder.row(InlineKeyboardButton(text="📦 Порог низкого остатка", callback_data="admin:settings:low_stock"))
+        builder.row(InlineKeyboardButton(text="🔔 Время резерва", callback_data="admin:settings:reservation"))
+        return builder.as_markup()
+
+    @staticmethod
+    def settings_logging(s: BotSettings) -> InlineKeyboardMarkup:
+        """Logging settings menu"""
+        builder = InlineKeyboardBuilder()
+
+        def toggle(enabled: bool, name: str, key: str):
+            icon = "✅" if enabled else "❌"
+            builder.row(InlineKeyboardButton(
+                text=f"{icon} {name}",
+                callback_data=f"admin:settings:log_toggle:{key}"
+            ))
+
+        toggle(s.log_sales, "Продажи", "log_sales")
+        toggle(s.log_supplies, "Закупки", "log_supplies")
+        toggle(s.log_writeoffs, "Списания", "log_writeoffs")
+        toggle(s.log_products, "Товары (создание/изменение/удаление)", "log_products")
+        toggle(s.log_reservations, "Резервы", "log_reservations")
+        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:settings_menu"))
+        return builder.as_markup()
+
+    @staticmethod
+    def settings_reminders(s: BotSettings) -> InlineKeyboardMarkup:
+        """Reminders settings menu"""
+        builder = InlineKeyboardBuilder()
+        status = "✅ Вкл" if s.reminder_enabled else "❌ Выкл"
+        builder.row(InlineKeyboardButton(
+            text=f"Напоминание: {status}",
+            callback_data="admin:settings:reminder_toggle"
+        ))
+        builder.row(InlineKeyboardButton(
+            text=f"⏰ Время: {s.reminder_hour:02d}:{s.reminder_minute:02d}",
+            callback_data="admin:settings:reminder_time"
+        ))
+        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:settings_menu"))
+        return builder.as_markup()
+
+    @staticmethod
+    def settings_low_stock(threshold: int) -> InlineKeyboardMarkup:
+        """Low stock threshold settings"""
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(
+            text=f"Текущий порог: {threshold} шт.",
+            callback_data="noop"
+        ))
+        row = []
+        for v in [1, 2, 3, 5, 10]:
+            icon = "✅ " if v == threshold else ""
+            row.append(InlineKeyboardButton(
+                text=f"{icon}{v}",
+                callback_data=f"admin:settings:set_low_stock:{v}"
+            ))
+        builder.row(*row)
+        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:settings_menu"))
+        return builder.as_markup()
+
+    @staticmethod
+    def settings_reservation(hours: int) -> InlineKeyboardMarkup:
+        """Reservation time settings"""
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(
+            text=f"Текущее время: {hours} ч.",
+            callback_data="noop"
+        ))
+        row = []
+        for v in [6, 12, 24, 48, 72]:
+            icon = "✅ " if v == hours else ""
+            row.append(InlineKeyboardButton(
+                text=f"{icon}{v}ч",
+                callback_data=f"admin:settings:set_reservation:{v}"
+            ))
+        builder.row(*row)
+        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:settings_menu"))
         return builder.as_markup()
 
     @staticmethod

@@ -407,7 +407,7 @@ async def supply_confirm(callback: CallbackQuery, db: Database, user: User, bot:
         return
 
     # Process items
-    logger = LoggerService(bot)
+    logger = LoggerService(bot, db)
     created_products = []
     updated_products = []
     supply_items = []
