@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func, and_, or_, event
 from datetime import datetime, timedelta
 from typing import Optional, List, Sequence
 import os
@@ -22,6 +22,13 @@ class Database:
                 os.makedirs(db_dir)
 
         self.engine = create_async_engine(self.database_url, echo=False)
+
+        # Register Unicode-aware LOWER for SQLite (default only handles ASCII)
+        if "sqlite" in self.database_url:
+            @event.listens_for(self.engine.sync_engine, "connect")
+            def _set_sqlite_unicode_lower(dbapi_conn, connection_record):
+                dbapi_conn.create_function("LOWER", 1, lambda s: s.lower() if s else s)
+
         self.session_factory = async_sessionmaker(
             self.engine, class_=AsyncSession, expire_on_commit=False
         )
@@ -372,6 +379,7 @@ class Database:
         """Search products by name, brand name, or category name (case-insensitive)"""
         async with self.session_factory() as session:
             # Search across product name, brand name, and category name
+            search_lower = query.lower()
             search_query = (
                 select(Product)
                 .join(Brand, Product.brand_id == Brand.id)
@@ -379,9 +387,9 @@ class Database:
                 .where(
                     Product.is_available == True,
                     or_(
-                        Product.name.ilike(f"%{query}%"),
-                        Brand.name.ilike(f"%{query}%"),
-                        Category.name.ilike(f"%{query}%"),
+                        func.lower(Product.name).contains(search_lower),
+                        func.lower(Brand.name).contains(search_lower),
+                        func.lower(Category.name).contains(search_lower),
                     )
                 )
                 .order_by(Brand.name, Product.name)
