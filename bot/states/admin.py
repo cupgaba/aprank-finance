@@ -40,6 +40,10 @@ class AdminStates(StatesGroup):
     sale_select_product = State()
     sale_enter_quantity = State()
     sale_enter_price = State()
+    sale_search = State()
+
+    # Search states
+    search_product = State()
 
     # Write-off states
     writeoff_select_category = State()

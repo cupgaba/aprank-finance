@@ -253,6 +253,7 @@ class AdminKeyboards:
         """Sales menu"""
         builder = InlineKeyboardBuilder()
         builder.row(InlineKeyboardButton(text="➕ Добавить продажу", callback_data="admin:sale:new"))
+        builder.row(InlineKeyboardButton(text="🔍 Быстрая продажа (поиск)", callback_data="admin:sale:search"))
         builder.row(InlineKeyboardButton(text="📋 Продажи за сегодня", callback_data="admin:sale:today"))
         builder.row(InlineKeyboardButton(text="📊 История продаж", callback_data="admin:sale:history"))
         return builder.as_markup()

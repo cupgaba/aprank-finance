@@ -213,28 +213,6 @@ async def add_products_batch(message: Message, db: Database, user: User, bot: Bo
     """Process batch product creation"""
     data = await state.get_data()
 
-    # Check if this is search mode
-    if data.get("search_mode"):
-        # Handle search
-        query = message.text.strip()
-        products = await db.search_products(query)
-
-        await state.clear()
-
-        if not products:
-            await message.answer(
-                f"🔍 По запросу '<b>{query}</b>' ничего не найдено.",
-                reply_markup=AdminKeyboards.main_menu(),
-                parse_mode="HTML"
-            )
-        else:
-            await message.answer(
-                f"🔍 Результаты поиска '<b>{query}</b>' ({len(products)} шт.):",
-                reply_markup=AdminKeyboards.products_list(products),
-                parse_mode="HTML"
-            )
-        return
-
     # Parse products list
     lines = message.text.strip().split("\n")
     created_products = []
@@ -690,22 +668,38 @@ async def search_product_start(callback: CallbackQuery, is_admin: bool, state: F
         await callback.answer("⛔️ Нет доступа", show_alert=True)
         return
 
-    # Using a simple approach - ask for search query in message
+    await state.set_state(AdminStates.search_product)
+
     await callback.message.edit_text(
         "🔍 <b>Поиск товара</b>\n\n"
-        "Введите название товара для поиска:",
+        "Введите название товара, бренда или категории:",
         parse_mode="HTML"
     )
-    await callback.message.answer(
-        "Ожидаю запрос...",
-        reply_markup=CommonKeyboards.cancel()
-    )
-
-    # We'll handle search in a separate state/handler or just make it simple
-    # For simplicity, let's assume the next text message is a search query
-    await state.set_state(AdminStates.add_product_name)  # Reuse state temporarily
-    await state.update_data(search_mode=True)
 
 
-# Note: Search handling would need additional logic
-# For now, this is a basic implementation
+@products_router.message(AdminStates.search_product)
+async def search_product_results(message: Message, db: Database, state: FSMContext):
+    """Show product search results"""
+    query = message.text.strip()
+
+    if len(query) < 2:
+        await message.answer("❌ Введите минимум 2 символа для поиска:")
+        return
+
+    products = await db.search_products(query)
+
+    await state.clear()
+
+    if not products:
+        await message.answer(
+            f"🔍 По запросу '<b>{query}</b>' ничего не найдено.",
+            reply_markup=AdminKeyboards.products_menu(),
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            f"🔍 <b>Результаты поиска</b> '<b>{query}</b>' ({len(products)} шт.)\n\n"
+            "Выберите товар:",
+            reply_markup=AdminKeyboards.products_list(products, show_category=True),
+            parse_mode="HTML"
+        )

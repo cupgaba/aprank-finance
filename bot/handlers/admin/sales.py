@@ -357,6 +357,56 @@ async def quick_sell_product(callback: CallbackQuery, db: Database, is_admin: bo
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
 
 
+@sales_router.callback_query(F.data == "admin:sale:search")
+async def sale_search_start(callback: CallbackQuery, is_admin: bool, state: FSMContext):
+    """Start search for quick sale"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    await state.set_state(AdminStates.sale_search)
+
+    await callback.message.edit_text(
+        "🔍 <b>Быстрая продажа</b>\n\n"
+        "Введите название товара, бренда или категории для поиска:",
+        parse_mode="HTML"
+    )
+
+
+@sales_router.message(AdminStates.sale_search)
+async def sale_search_results(message: Message, db: Database, is_admin: bool, state: FSMContext):
+    """Show search results for sale"""
+    query = message.text.strip()
+
+    if len(query) < 2:
+        await message.answer("❌ Введите минимум 2 символа для поиска:")
+        return
+
+    products = await db.search_products(query, in_stock_only=True)
+
+    await state.clear()
+
+    if not products:
+        await message.answer(
+            f"🔍 По запросу '<b>{query}</b>' товаров в наличии не найдено.",
+            reply_markup=AdminKeyboards.sales_menu(),
+            parse_mode="HTML"
+        )
+        return
+
+    await message.answer(
+        f"🔍 <b>Результаты поиска</b> '<b>{query}</b>' ({len(products)} шт.)\n\n"
+        "Выберите товар для продажи:",
+        reply_markup=AdminKeyboards.products_list(
+            products,
+            action="sell",
+            back_callback="admin:sales_menu",
+            show_category=True
+        ),
+        parse_mode="HTML"
+    )
+
+
 @sales_router.callback_query(F.data == "admin:sale:today")
 async def today_sales(callback: CallbackQuery, db: Database, is_admin: bool):
     """Show today's sales"""

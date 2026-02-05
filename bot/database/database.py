@@ -368,15 +368,27 @@ class Database:
                 return True
             return False
 
-    async def search_products(self, query: str) -> Sequence[Product]:
-        """Search products by name"""
+    async def search_products(self, query: str, in_stock_only: bool = False) -> Sequence[Product]:
+        """Search products by name, brand name, or category name (case-insensitive)"""
         async with self.session_factory() as session:
-            result = await session.execute(
-                select(Product).where(
+            # Search across product name, brand name, and category name
+            search_query = (
+                select(Product)
+                .join(Brand, Product.brand_id == Brand.id)
+                .join(Category, Brand.category_id == Category.id)
+                .where(
                     Product.is_available == True,
-                    Product.name.ilike(f"%{query}%")
-                ).order_by(Product.name)
+                    or_(
+                        Product.name.ilike(f"%{query}%"),
+                        Brand.name.ilike(f"%{query}%"),
+                        Category.name.ilike(f"%{query}%"),
+                    )
+                )
+                .order_by(Brand.name, Product.name)
             )
+            if in_stock_only:
+                search_query = search_query.where(Product.quantity > 0)
+            result = await session.execute(search_query)
             return result.scalars().all()
 
     async def get_low_stock_products(self, threshold: int = 3) -> Sequence[Product]:
