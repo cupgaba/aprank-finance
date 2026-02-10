@@ -3,204 +3,15 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 
 from ...database import Database
-from ...database.models import User
 from ...keyboards.admin import AdminKeyboards
 from ...states.admin import AdminStates
 from ...services.channel import ChannelService
-from ...utils.formatting import format_product, format_channel_post
+from ...utils.formatting import format_pricelist
 
 publications_router = Router()
 
 
-@publications_router.callback_query(F.data == "admin:publish:select")
-async def publish_select_start(callback: CallbackQuery, db: Database, is_admin: bool, state: FSMContext):
-    """Start publishing - select category"""
-    if not is_admin:
-        await callback.answer("⛔️ Нет доступа", show_alert=True)
-        return
-
-    categories = await db.get_all_categories()
-
-    if not categories:
-        await callback.answer("❌ Нет категорий", show_alert=True)
-        return
-
-    await state.set_state(AdminStates.publish_select_category)
-
-    await callback.message.edit_text(
-        "📢 <b>Публикация товара</b>\n\n"
-        "Выберите категорию:",
-        reply_markup=AdminKeyboards.select_category_for_product(categories),
-        parse_mode="HTML"
-    )
-
-
-@publications_router.callback_query(
-    AdminStates.publish_select_category,
-    F.data.startswith("admin:product:select_cat:")
-)
-async def publish_category_selected(callback: CallbackQuery, db: Database, state: FSMContext):
-    """Category selected for publication"""
-    category_id = int(callback.data.split(":")[-1])
-    brands = await db.get_brands_by_category(category_id)
-
-    if not brands:
-        await callback.answer("❌ В этой категории нет брендов", show_alert=True)
-        return
-
-    await state.set_state(AdminStates.publish_select_brand)
-
-    await callback.message.edit_text(
-        "📢 <b>Публикация товара</b>\n\n"
-        "Выберите бренд:",
-        reply_markup=AdminKeyboards.select_brand_for_product(brands),
-        parse_mode="HTML"
-    )
-
-
-@publications_router.callback_query(
-    AdminStates.publish_select_brand,
-    F.data.startswith("admin:product:select_brand:")
-)
-async def publish_brand_selected(callback: CallbackQuery, db: Database, state: FSMContext):
-    """Brand selected for publication"""
-    brand_id = int(callback.data.split(":")[-1])
-    products = await db.get_products_by_brand(brand_id)
-
-    # Filter only products with stock
-    products = [p for p in products if p.quantity > 0]
-
-    if not products:
-        await callback.answer("❌ Нет товаров для публикации", show_alert=True)
-        return
-
-    await state.set_state(AdminStates.publish_select_product)
-
-    await callback.message.edit_text(
-        "📢 <b>Публикация товара</b>\n\n"
-        "Выберите товар:",
-        reply_markup=AdminKeyboards.products_list(
-            products,
-            brand_id,
-            action="publish",
-            back_callback="admin:publications_menu"
-        ),
-        parse_mode="HTML"
-    )
-
-
-@publications_router.callback_query(
-    AdminStates.publish_select_product,
-    F.data.startswith("admin:product:publish:")
-)
-async def publish_product_selected(callback: CallbackQuery, db: Database, state: FSMContext):
-    """Product selected for publication"""
-    product_id = int(callback.data.split(":")[-1])
-    product = await db.get_product_by_id(product_id)
-
-    if not product:
-        await callback.answer("❌ Товар не найден", show_alert=True)
-        return
-
-    await state.update_data(product_id=product_id)
-    await state.set_state(AdminStates.publish_confirm)
-
-    # Show preview
-    preview = format_channel_post(product)
-
-    text = (
-        f"📢 <b>Предпросмотр публикации</b>\n\n"
-        f"{'─' * 20}\n"
-        f"{preview}\n"
-        f"{'─' * 20}\n\n"
-        f"Опубликовать в канал?"
-    )
-
-    if product.photo_file_id:
-        await callback.message.delete()
-        await callback.message.answer_photo(
-            photo=product.photo_file_id,
-            caption=text,
-            reply_markup=AdminKeyboards.publish_confirm(product_id),
-            parse_mode="HTML"
-        )
-    else:
-        await callback.message.edit_text(
-            text,
-            reply_markup=AdminKeyboards.publish_confirm(product_id),
-            parse_mode="HTML"
-        )
-
-
-@publications_router.callback_query(F.data.startswith("admin:publish:confirm:"))
-async def publish_confirm(callback: CallbackQuery, db: Database, bot: Bot, is_admin: bool, state: FSMContext):
-    """Confirm and publish"""
-    if not is_admin:
-        await callback.answer("⛔️ Нет доступа", show_alert=True)
-        return
-
-    product_id = int(callback.data.split(":")[-1])
-    product = await db.get_product_by_id(product_id)
-
-    if not product:
-        await callback.answer("❌ Товар не найден", show_alert=True)
-        return
-
-    # Publish to channel
-    channel_service = ChannelService(bot, db)
-    post = await channel_service.publish_product(product)
-
-    await state.clear()
-
-    if post:
-        await callback.answer("✅ Опубликовано!")
-        try:
-            await callback.message.delete()
-        except:
-            pass
-        await callback.message.answer(
-            f"✅ Товар <b>{product.full_name}</b> опубликован в канал!",
-            reply_markup=AdminKeyboards.main_menu(),
-            parse_mode="HTML"
-        )
-    else:
-        await callback.answer("❌ Ошибка публикации. Проверьте настройки канала.", show_alert=True)
-
-
-@publications_router.callback_query(F.data.startswith("admin:product:publish:"))
-async def quick_publish_product(callback: CallbackQuery, db: Database, bot: Bot, is_admin: bool, state: FSMContext):
-    """Quick publish from product view"""
-    if not is_admin:
-        await callback.answer("⛔️ Нет доступа", show_alert=True)
-        return
-
-    product_id = int(callback.data.split(":")[-1])
-    product = await db.get_product_by_id(product_id)
-
-    if not product:
-        await callback.answer("❌ Товар не найден", show_alert=True)
-        return
-
-    if product.quantity <= 0:
-        await callback.answer("❌ Товар закончился", show_alert=True)
-        return
-
-    # Show preview
-    preview = format_channel_post(product)
-
-    text = (
-        f"📢 <b>Предпросмотр публикации</b>\n\n"
-        f"{'─' * 20}\n"
-        f"{preview}\n"
-        f"{'─' * 20}\n\n"
-        f"Опубликовать в канал?"
-    )
-
-    await callback.message.edit_text(
-        text,
-        reply_markup=AdminKeyboards.publish_confirm(product_id),
-        parse_mode="HTML"
-    )
+# ==================== PUBLISH PRICELIST ====================
 
 
 @publications_router.callback_query(F.data == "admin:publish:pricelist")
@@ -210,8 +21,9 @@ async def publish_pricelist(callback: CallbackQuery, db: Database, bot: Bot, is_
         await callback.answer("⛔️ Нет доступа", show_alert=True)
         return
 
+    s = await db.get_settings()
     channel_service = ChannelService(bot, db)
-    success = await channel_service.publish_pricelist()
+    success = await channel_service.publish_pricelist(settings=s)
 
     if success:
         await callback.answer("✅ Прайс-лист опубликован!")
@@ -222,3 +34,431 @@ async def publish_pricelist(callback: CallbackQuery, db: Database, bot: Bot, is_
         )
     else:
         await callback.answer("❌ Ошибка публикации. Проверьте настройки канала.", show_alert=True)
+
+
+# ==================== PRICELIST CONFIG ====================
+
+
+@publications_router.callback_query(F.data == "admin:publish:config")
+async def pricelist_config(callback: CallbackQuery, db: Database, is_admin: bool):
+    """Show pricelist template config"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    s = await db.get_settings()
+    await callback.message.edit_text(
+        "⚙️ <b>Настройка шаблона прайса</b>\n\n"
+        "Настройте как будет выглядеть прайс-лист\n"
+        "при публикации в канал:",
+        reply_markup=AdminKeyboards.pricelist_config(s),
+        parse_mode="HTML"
+    )
+
+
+@publications_router.callback_query(F.data == "admin:publish:config:header")
+async def pricelist_set_header_start(callback: CallbackQuery, db: Database, is_admin: bool, state: FSMContext):
+    """Start setting pricelist header"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    s = await db.get_settings()
+    current = s.pricelist_header or "ПРАЙС-ЛИСТ"
+
+    await state.set_state(AdminStates.pricelist_set_header)
+    await callback.message.edit_text(
+        "📝 <b>Заголовок прайс-листа</b>\n\n"
+        f"Текущий: <code>{current}</code>\n\n"
+        "Введите новый заголовок:",
+        parse_mode="HTML"
+    )
+
+
+@publications_router.message(AdminStates.pricelist_set_header)
+async def pricelist_set_header(message: Message, db: Database, state: FSMContext):
+    """Process new pricelist header"""
+    header = message.text.strip()
+    if len(header) > 200:
+        await message.answer("❌ Заголовок слишком длинный (макс. 200 символов). Попробуйте снова:")
+        return
+
+    await db.update_settings(pricelist_header=header)
+    await state.clear()
+
+    s = await db.get_settings()
+    await message.answer(
+        f"✅ Заголовок установлен: <b>{header}</b>",
+        reply_markup=AdminKeyboards.pricelist_config(s),
+        parse_mode="HTML"
+    )
+
+
+@publications_router.callback_query(F.data == "admin:publish:config:toggle_qty")
+async def pricelist_toggle_qty(callback: CallbackQuery, db: Database, is_admin: bool):
+    """Toggle show quantities in pricelist"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    s = await db.get_settings()
+    s = await db.update_settings(pricelist_show_quantities=not s.pricelist_show_quantities)
+    state = "✅ Вкл" if s.pricelist_show_quantities else "❌ Выкл"
+    await callback.answer(f"Количество: {state}")
+    await callback.message.edit_reply_markup(
+        reply_markup=AdminKeyboards.pricelist_config(s)
+    )
+
+
+@publications_router.callback_query(F.data == "admin:publish:config:toggle_brands")
+async def pricelist_toggle_brands(callback: CallbackQuery, db: Database, is_admin: bool):
+    """Toggle brand grouping in pricelist"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    s = await db.get_settings()
+    s = await db.update_settings(pricelist_show_brands=not s.pricelist_show_brands)
+    state = "✅ Вкл" if s.pricelist_show_brands else "❌ Выкл"
+    await callback.answer(f"Группировка: {state}")
+    await callback.message.edit_reply_markup(
+        reply_markup=AdminKeyboards.pricelist_config(s)
+    )
+
+
+@publications_router.callback_query(F.data == "admin:publish:config:footer")
+async def pricelist_set_footer_start(callback: CallbackQuery, db: Database, is_admin: bool, state: FSMContext):
+    """Start setting pricelist footer"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    s = await db.get_settings()
+    current = s.pricelist_footer or "не задана"
+
+    await state.set_state(AdminStates.pricelist_set_footer)
+    await callback.message.edit_text(
+        "📝 <b>Подпись прайс-листа</b>\n\n"
+        f"Текущая: <code>{current}</code>\n\n"
+        "Введите текст подписи (будет добавлена в конце прайса).\n"
+        "Отправьте <code>-</code> чтобы убрать подпись.",
+        parse_mode="HTML"
+    )
+
+
+@publications_router.message(AdminStates.pricelist_set_footer)
+async def pricelist_set_footer(message: Message, db: Database, state: FSMContext):
+    """Process new pricelist footer"""
+    footer = message.text.strip()
+    if footer == "-":
+        footer = None
+
+    if footer and len(footer) > 500:
+        await message.answer("❌ Подпись слишком длинная (макс. 500 символов). Попробуйте снова:")
+        return
+
+    await db.update_settings(pricelist_footer=footer if footer else "")
+    await state.clear()
+
+    s = await db.get_settings()
+    if footer:
+        await message.answer(
+            f"✅ Подпись установлена",
+            reply_markup=AdminKeyboards.pricelist_config(s),
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            "✅ Подпись удалена",
+            reply_markup=AdminKeyboards.pricelist_config(s),
+            parse_mode="HTML"
+        )
+
+
+@publications_router.callback_query(F.data == "admin:publish:config:photo")
+async def pricelist_set_photo_start(callback: CallbackQuery, db: Database, is_admin: bool, state: FSMContext):
+    """Start setting pricelist photo"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    s = await db.get_settings()
+
+    await state.set_state(AdminStates.pricelist_set_photo)
+
+    text = "🖼 <b>Фото прайс-листа</b>\n\n"
+    if s.pricelist_photo_file_id:
+        text += "Текущее фото установлено.\n\n"
+    else:
+        text += "Фото не установлено.\n\n"
+    text += "Отправьте фото для прайс-листа.\nОтправьте <code>-</code> чтобы убрать фото."
+
+    if s.pricelist_photo_file_id:
+        await callback.message.delete()
+        await callback.message.answer_photo(
+            photo=s.pricelist_photo_file_id,
+            caption=text,
+            parse_mode="HTML"
+        )
+    else:
+        await callback.message.edit_text(text, parse_mode="HTML")
+
+
+@publications_router.message(AdminStates.pricelist_set_photo, F.photo)
+async def pricelist_set_photo(message: Message, db: Database, state: FSMContext):
+    """Process new pricelist photo"""
+    photo_file_id = message.photo[-1].file_id
+    await db.update_settings(pricelist_photo_file_id=photo_file_id)
+    await state.clear()
+
+    s = await db.get_settings()
+    await message.answer(
+        "✅ Фото прайс-листа установлено!",
+        reply_markup=AdminKeyboards.pricelist_config(s),
+        parse_mode="HTML"
+    )
+
+
+@publications_router.message(AdminStates.pricelist_set_photo, F.text)
+async def pricelist_remove_photo(message: Message, db: Database, state: FSMContext):
+    """Remove pricelist photo"""
+    if message.text.strip() == "-":
+        await db.update_settings(pricelist_photo_file_id="")
+        await state.clear()
+
+        s = await db.get_settings()
+        await message.answer(
+            "✅ Фото удалено",
+            reply_markup=AdminKeyboards.pricelist_config(s),
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer("❌ Отправьте фото или <code>-</code> для удаления.", parse_mode="HTML")
+
+
+@publications_router.callback_query(F.data == "admin:publish:preview")
+async def pricelist_preview(callback: CallbackQuery, db: Database, bot: Bot, is_admin: bool):
+    """Preview pricelist with current template"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    s = await db.get_settings()
+    products = await db.get_all_products(in_stock_only=True)
+
+    if not products:
+        await callback.answer("❌ Нет товаров в наличии", show_alert=True)
+        return
+
+    text = format_pricelist(
+        products,
+        header=s.pricelist_header,
+        show_quantities=s.pricelist_show_quantities,
+        show_brands=s.pricelist_show_brands,
+        footer=s.pricelist_footer,
+    )
+
+    # Truncate if too long for preview
+    if len(text) > 3800:
+        text = text[:3800] + "\n\n<i>... (обрезано для предпросмотра)</i>"
+
+    preview_text = f"👁 <b>Предпросмотр прайс-листа:</b>\n\n{'─' * 20}\n{text}\n{'─' * 20}"
+
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+
+    if s.pricelist_photo_file_id:
+        # With photo - caption limit is 1024
+        if len(preview_text) > 1000:
+            await callback.message.answer_photo(
+                photo=s.pricelist_photo_file_id,
+                caption="👁 <b>Предпросмотр прайс-листа (с фото):</b>",
+                parse_mode="HTML"
+            )
+            await callback.message.answer(
+                text,
+                reply_markup=AdminKeyboards.pricelist_config(s),
+                parse_mode="HTML"
+            )
+        else:
+            await callback.message.answer_photo(
+                photo=s.pricelist_photo_file_id,
+                caption=preview_text,
+                parse_mode="HTML"
+            )
+            await callback.message.answer(
+                "⚙️ <b>Настройка шаблона прайса</b>",
+                reply_markup=AdminKeyboards.pricelist_config(s),
+                parse_mode="HTML"
+            )
+    else:
+        await callback.message.answer(
+            preview_text,
+            reply_markup=AdminKeyboards.pricelist_config(s),
+            parse_mode="HTML"
+        )
+
+
+# ==================== AUTO-PUBLISH SETTINGS ====================
+
+
+@publications_router.callback_query(F.data == "admin:publish:auto")
+async def pricelist_auto_settings(callback: CallbackQuery, db: Database, is_admin: bool):
+    """Show pricelist auto-publish settings"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    s = await db.get_settings()
+    await callback.message.edit_text(
+        "⏰ <b>Автопубликация прайс-листа</b>\n\n"
+        "Настройте автоматическую публикацию\n"
+        "прайса в канал по расписанию:",
+        reply_markup=AdminKeyboards.pricelist_auto(s),
+        parse_mode="HTML"
+    )
+
+
+@publications_router.callback_query(F.data == "admin:publish:auto:toggle")
+async def pricelist_auto_toggle(callback: CallbackQuery, db: Database, is_admin: bool):
+    """Toggle pricelist auto-publish"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    s = await db.get_settings()
+    s = await db.update_settings(pricelist_auto_enabled=not s.pricelist_auto_enabled)
+    state = "✅ Включена" if s.pricelist_auto_enabled else "❌ Выключена"
+    await callback.answer(f"Автопубликация: {state}")
+    await callback.message.edit_reply_markup(
+        reply_markup=AdminKeyboards.pricelist_auto(s)
+    )
+
+
+@publications_router.callback_query(F.data.startswith("admin:publish:auto:freq:"))
+async def pricelist_auto_frequency(callback: CallbackQuery, db: Database, is_admin: bool):
+    """Set auto-publish frequency"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    freq = int(callback.data.split(":")[-1])
+    s = await db.update_settings(pricelist_auto_frequency=freq)
+    await callback.answer(f"✅ Частота: {freq}x/день")
+    await callback.message.edit_reply_markup(
+        reply_markup=AdminKeyboards.pricelist_auto(s)
+    )
+
+
+@publications_router.callback_query(F.data == "admin:publish:auto:time1")
+async def pricelist_set_time1_start(callback: CallbackQuery, is_admin: bool, state: FSMContext):
+    """Start setting time slot 1"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    await state.set_state(AdminStates.pricelist_set_time1)
+    await callback.message.edit_text(
+        "⏰ <b>Время публикации 1</b>\n\n"
+        "Введите время в формате <b>ЧЧ:ММ</b>\n"
+        "Например: <code>10:00</code>",
+        parse_mode="HTML"
+    )
+
+
+@publications_router.message(AdminStates.pricelist_set_time1)
+async def pricelist_set_time1(message: Message, db: Database, state: FSMContext):
+    """Process time slot 1"""
+    hour, minute = _parse_time(message.text)
+    if hour is None:
+        await message.answer("❌ Неверный формат. Введите время в формате <b>ЧЧ:ММ</b>", parse_mode="HTML")
+        return
+
+    s = await db.update_settings(pricelist_time1_hour=hour, pricelist_time1_minute=minute)
+    await state.clear()
+    await message.answer(
+        f"✅ Время 1 установлено: <b>{hour:02d}:{minute:02d}</b>",
+        reply_markup=AdminKeyboards.pricelist_auto(s),
+        parse_mode="HTML"
+    )
+
+
+@publications_router.callback_query(F.data == "admin:publish:auto:time2")
+async def pricelist_set_time2_start(callback: CallbackQuery, is_admin: bool, state: FSMContext):
+    """Start setting time slot 2"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    await state.set_state(AdminStates.pricelist_set_time2)
+    await callback.message.edit_text(
+        "⏰ <b>Время публикации 2</b>\n\n"
+        "Введите время в формате <b>ЧЧ:ММ</b>\n"
+        "Например: <code>18:00</code>",
+        parse_mode="HTML"
+    )
+
+
+@publications_router.message(AdminStates.pricelist_set_time2)
+async def pricelist_set_time2(message: Message, db: Database, state: FSMContext):
+    """Process time slot 2"""
+    hour, minute = _parse_time(message.text)
+    if hour is None:
+        await message.answer("❌ Неверный формат. Введите время в формате <b>ЧЧ:ММ</b>", parse_mode="HTML")
+        return
+
+    s = await db.update_settings(pricelist_time2_hour=hour, pricelist_time2_minute=minute)
+    await state.clear()
+    await message.answer(
+        f"✅ Время 2 установлено: <b>{hour:02d}:{minute:02d}</b>",
+        reply_markup=AdminKeyboards.pricelist_auto(s),
+        parse_mode="HTML"
+    )
+
+
+@publications_router.callback_query(F.data == "admin:publish:auto:time3")
+async def pricelist_set_time3_start(callback: CallbackQuery, is_admin: bool, state: FSMContext):
+    """Start setting time slot 3"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    await state.set_state(AdminStates.pricelist_set_time3)
+    await callback.message.edit_text(
+        "⏰ <b>Время публикации 3</b>\n\n"
+        "Введите время в формате <b>ЧЧ:ММ</b>\n"
+        "Например: <code>14:00</code>",
+        parse_mode="HTML"
+    )
+
+
+@publications_router.message(AdminStates.pricelist_set_time3)
+async def pricelist_set_time3(message: Message, db: Database, state: FSMContext):
+    """Process time slot 3"""
+    hour, minute = _parse_time(message.text)
+    if hour is None:
+        await message.answer("❌ Неверный формат. Введите время в формате <b>ЧЧ:ММ</b>", parse_mode="HTML")
+        return
+
+    s = await db.update_settings(pricelist_time3_hour=hour, pricelist_time3_minute=minute)
+    await state.clear()
+    await message.answer(
+        f"✅ Время 3 установлено: <b>{hour:02d}:{minute:02d}</b>",
+        reply_markup=AdminKeyboards.pricelist_auto(s),
+        parse_mode="HTML"
+    )
+
+
+def _parse_time(text: str) -> tuple:
+    """Parse time string HH:MM, returns (hour, minute) or (None, None)"""
+    try:
+        parts = text.strip().split(":")
+        hour = int(parts[0])
+        minute = int(parts[1]) if len(parts) > 1 else 0
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            return hour, minute
+    except (ValueError, IndexError):
+        pass
+    return None, None

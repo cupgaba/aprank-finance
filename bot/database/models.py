@@ -239,6 +239,23 @@ class BotSettings(Base):
     # Reservation settings
     reservation_hours: Mapped[int] = mapped_column(Integer, default=24)
 
+    # Pricelist template settings
+    pricelist_header: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=None)
+    pricelist_show_quantities: Mapped[bool] = mapped_column(Boolean, default=True)
+    pricelist_show_brands: Mapped[bool] = mapped_column(Boolean, default=True)
+    pricelist_footer: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=None)
+    pricelist_photo_file_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, default=None)
+
+    # Pricelist auto-publish settings
+    pricelist_auto_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    pricelist_auto_frequency: Mapped[int] = mapped_column(Integer, default=1)  # 1, 2, or 3 times/day
+    pricelist_time1_hour: Mapped[int] = mapped_column(Integer, default=10)
+    pricelist_time1_minute: Mapped[int] = mapped_column(Integer, default=0)
+    pricelist_time2_hour: Mapped[int] = mapped_column(Integer, default=18)
+    pricelist_time2_minute: Mapped[int] = mapped_column(Integer, default=0)
+    pricelist_time3_hour: Mapped[int] = mapped_column(Integer, default=14)
+    pricelist_time3_minute: Mapped[int] = mapped_column(Integer, default=0)
+
 
 class ChannelPost(Base):
     __tablename__ = "channel_posts"

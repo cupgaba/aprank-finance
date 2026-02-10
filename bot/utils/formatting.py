@@ -30,19 +30,26 @@ def format_product(product: Product, show_purchase_price: bool = False) -> str:
     return "\n".join(lines)
 
 
-def format_product_short(product: Product) -> str:
+def format_product_short(product: Product, show_quantity: bool = True) -> str:
     """Short format for lists"""
     status = "✅" if product.quantity > 0 else "❌"
-    return f"{status} {product.name} — {format_price(product.sale_price)} ({product.quantity} шт.)"
+    if show_quantity:
+        return f"{status} {product.name} — {format_price(product.sale_price)} ({product.quantity} шт.)"
+    return f"{status} {product.name} — {format_price(product.sale_price)}"
 
 
 def format_pricelist(
     products: Sequence[Product],
     category: Optional[Category] = None,
-    brand: Optional[Brand] = None
+    brand: Optional[Brand] = None,
+    header: Optional[str] = None,
+    show_quantities: bool = True,
+    show_brands: bool = True,
+    footer: Optional[str] = None,
 ) -> str:
-    """Format price list"""
-    lines = ["📋 <b>ПРАЙС-ЛИСТ</b>"]
+    """Format price list with configurable template"""
+    header_text = header or "ПРАЙС-ЛИСТ"
+    lines = [f"📋 <b>{header_text}</b>"]
 
     if category:
         lines.append(f"📁 Категория: {category.name}")
@@ -55,8 +62,8 @@ def format_pricelist(
         lines.append("Товары не найдены")
         return "\n".join(lines)
 
-    # Group by brand if no specific brand selected
-    if not brand:
+    if show_brands and not brand:
+        # Group by brand
         grouped = {}
         for product in products:
             brand_name = product.brand.name
@@ -67,13 +74,17 @@ def format_pricelist(
         for brand_name, brand_products in sorted(grouped.items()):
             lines.append(f"\n<b>🏷 {brand_name}</b>")
             for p in sorted(brand_products, key=lambda x: x.name):
-                lines.append(format_product_short(p))
+                lines.append(format_product_short(p, show_quantity=show_quantities))
     else:
         for p in sorted(products, key=lambda x: x.name):
-            lines.append(format_product_short(p))
+            lines.append(format_product_short(p, show_quantity=show_quantities))
 
     # Add timestamp
     lines.append(f"\n🕐 Обновлено: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+
+    # Add custom footer
+    if footer:
+        lines.append(f"\n{footer}")
 
     return "\n".join(lines)
 

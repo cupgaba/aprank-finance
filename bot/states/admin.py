@@ -53,12 +53,15 @@ class AdminStates(StatesGroup):
     writeoff_enter_quantity = State()
     writeoff_enter_notes = State()
 
-    # Publication states
-    publish_select_category = State()
-    publish_select_brand = State()
-    publish_select_product = State()
-    publish_add_photo = State()
-    publish_confirm = State()
+    # Pricelist config states
+    pricelist_set_header = State()
+    pricelist_set_footer = State()
+    pricelist_set_photo = State()
+
+    # Pricelist auto-publish settings states
+    pricelist_set_time1 = State()
+    pricelist_set_time2 = State()
+    pricelist_set_time3 = State()
 
     # Settings states
     settings_reminder_time = State()

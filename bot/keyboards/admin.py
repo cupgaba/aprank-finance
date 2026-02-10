@@ -154,7 +154,6 @@ class AdminKeyboards:
         builder.row(InlineKeyboardButton(text="💵 Изменить цену закупки", callback_data=f"admin:product:edit_purchase_price:{product.id}"))
         builder.row(InlineKeyboardButton(text="📦 Изменить остаток", callback_data=f"admin:product:edit_quantity:{product.id}"))
         builder.row(InlineKeyboardButton(text="🖼 Изменить фото", callback_data=f"admin:product:edit_photo:{product.id}"))
-        builder.row(InlineKeyboardButton(text="📢 Опубликовать в канал", callback_data=f"admin:product:publish:{product.id}"))
         builder.row(InlineKeyboardButton(text="💰 Продать", callback_data=f"admin:product:sell:{product.id}"))
         builder.row(InlineKeyboardButton(text="📤 Списать", callback_data=f"admin:product:writeoff:{product.id}"))
         builder.row(InlineKeyboardButton(text="🗑 Удалить товар", callback_data=f"admin:product:delete:{product.id}"))
@@ -303,18 +302,90 @@ class AdminKeyboards:
     def publications_menu() -> InlineKeyboardMarkup:
         """Publications menu"""
         builder = InlineKeyboardBuilder()
-        builder.row(InlineKeyboardButton(text="📢 Опубликовать товар", callback_data="admin:publish:select"))
         builder.row(InlineKeyboardButton(text="📋 Опубликовать прайс", callback_data="admin:publish:pricelist"))
+        builder.row(InlineKeyboardButton(text="⚙️ Настройка шаблона прайса", callback_data="admin:publish:config"))
+        builder.row(InlineKeyboardButton(text="⏰ Автопубликация прайса", callback_data="admin:publish:auto"))
         return builder.as_markup()
 
     @staticmethod
-    def publish_confirm(product_id: int) -> InlineKeyboardMarkup:
-        """Confirm publication"""
+    def pricelist_config(s: 'BotSettings') -> InlineKeyboardMarkup:
+        """Pricelist template config menu"""
         builder = InlineKeyboardBuilder()
-        builder.row(
-            InlineKeyboardButton(text="✅ Опубликовать", callback_data=f"admin:publish:confirm:{product_id}"),
-            InlineKeyboardButton(text="❌ Отмена", callback_data="admin:publications_menu")
-        )
+
+        header = s.pricelist_header or "ПРАЙС-ЛИСТ"
+        builder.row(InlineKeyboardButton(
+            text=f"📝 Заголовок: {header[:30]}{'...' if len(header) > 30 else ''}",
+            callback_data="admin:publish:config:header"
+        ))
+
+        qty_icon = "✅" if s.pricelist_show_quantities else "❌"
+        builder.row(InlineKeyboardButton(
+            text=f"{qty_icon} Показывать количество",
+            callback_data="admin:publish:config:toggle_qty"
+        ))
+
+        brands_icon = "✅" if s.pricelist_show_brands else "❌"
+        builder.row(InlineKeyboardButton(
+            text=f"{brands_icon} Группировать по брендам",
+            callback_data="admin:publish:config:toggle_brands"
+        ))
+
+        footer = s.pricelist_footer
+        footer_text = f"📝 Подпись: {footer[:30]}{'...' if footer and len(footer) > 30 else ''}" if footer else "📝 Подпись: не задана"
+        builder.row(InlineKeyboardButton(
+            text=footer_text,
+            callback_data="admin:publish:config:footer"
+        ))
+
+        photo_text = "🖼 Фото: установлено" if s.pricelist_photo_file_id else "🖼 Фото: не задано"
+        builder.row(InlineKeyboardButton(
+            text=photo_text,
+            callback_data="admin:publish:config:photo"
+        ))
+
+        builder.row(InlineKeyboardButton(text="👁 Предпросмотр", callback_data="admin:publish:preview"))
+        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:publications_menu"))
+        return builder.as_markup()
+
+    @staticmethod
+    def pricelist_auto(s: 'BotSettings') -> InlineKeyboardMarkup:
+        """Pricelist auto-publish settings"""
+        builder = InlineKeyboardBuilder()
+
+        status = "✅ Вкл" if s.pricelist_auto_enabled else "❌ Выкл"
+        builder.row(InlineKeyboardButton(
+            text=f"Автопубликация: {status}",
+            callback_data="admin:publish:auto:toggle"
+        ))
+
+        # Frequency selection
+        freq = s.pricelist_auto_frequency
+        freq_buttons = []
+        for v in [1, 2, 3]:
+            icon = "✅ " if v == freq else ""
+            freq_buttons.append(InlineKeyboardButton(
+                text=f"{icon}{v}x/день",
+                callback_data=f"admin:publish:auto:freq:{v}"
+            ))
+        builder.row(*freq_buttons)
+
+        # Time slots
+        builder.row(InlineKeyboardButton(
+            text=f"⏰ Время 1: {s.pricelist_time1_hour:02d}:{s.pricelist_time1_minute:02d}",
+            callback_data="admin:publish:auto:time1"
+        ))
+        if freq >= 2:
+            builder.row(InlineKeyboardButton(
+                text=f"⏰ Время 2: {s.pricelist_time2_hour:02d}:{s.pricelist_time2_minute:02d}",
+                callback_data="admin:publish:auto:time2"
+            ))
+        if freq >= 3:
+            builder.row(InlineKeyboardButton(
+                text=f"⏰ Время 3: {s.pricelist_time3_hour:02d}:{s.pricelist_time3_minute:02d}",
+                callback_data="admin:publish:auto:time3"
+            ))
+
+        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:publications_menu"))
         return builder.as_markup()
 
     # ==================== RESERVATIONS ====================

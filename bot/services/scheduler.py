@@ -35,14 +35,11 @@ class SchedulerService:
             replace_existing=True
         )
 
-        # Daily pricelist publication
+        # Pricelist auto-publish check every minute
         self.scheduler.add_job(
-            self._publish_daily_pricelist,
-            CronTrigger(
-                hour=settings.PRICELIST_HOUR,
-                minute=settings.PRICELIST_MINUTE
-            ),
-            id="daily_pricelist",
+            self._check_pricelist_schedule,
+            IntervalTrigger(minutes=1),
+            id="pricelist_schedule_check",
             replace_existing=True
         )
 
@@ -97,12 +94,32 @@ class SchedulerService:
         except Exception as e:
             print(f"Failed to send sales reminders: {e}")
 
-    async def _publish_daily_pricelist(self):
-        """Publish daily pricelist to channel"""
+    async def _check_pricelist_schedule(self):
+        """Check if it's time to auto-publish pricelist based on DB settings"""
         try:
-            await self.channel_service.publish_pricelist()
+            bot_settings = await self.db.get_settings()
+            if not bot_settings.pricelist_auto_enabled:
+                return
+
+            tz = pytz.timezone(settings.TIMEZONE)
+            now = datetime.now(tz)
+            current_hour = now.hour
+            current_minute = now.minute
+
+            # Check each configured time slot
+            time_slots = [(bot_settings.pricelist_time1_hour, bot_settings.pricelist_time1_minute)]
+            if bot_settings.pricelist_auto_frequency >= 2:
+                time_slots.append((bot_settings.pricelist_time2_hour, bot_settings.pricelist_time2_minute))
+            if bot_settings.pricelist_auto_frequency >= 3:
+                time_slots.append((bot_settings.pricelist_time3_hour, bot_settings.pricelist_time3_minute))
+
+            for hour, minute in time_slots:
+                if current_hour == hour and current_minute == minute:
+                    await self.channel_service.publish_pricelist(settings=bot_settings)
+                    break
+
         except Exception as e:
-            print(f"Failed to publish daily pricelist: {e}")
+            print(f"Failed to check pricelist schedule: {e}")
 
     async def _check_expired_reservations(self):
         """Check and expire old reservations"""
