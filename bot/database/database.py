@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy import select, func, and_, or_, event
+from sqlalchemy import select, func, and_, or_, event, text, inspect
 from datetime import datetime, timedelta
 from typing import Optional, List, Sequence
 import os
@@ -34,9 +34,42 @@ class Database:
         )
 
     async def init_db(self):
-        """Initialize database tables"""
+        """Initialize database tables and run migrations"""
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            # Run migrations for existing tables
+            await conn.run_sync(self._migrate_bot_settings)
+
+    @staticmethod
+    def _migrate_bot_settings(connection):
+        """Add missing columns to bot_settings table"""
+        insp = inspect(connection)
+        if not insp.has_table("bot_settings"):
+            return
+
+        existing = {col["name"] for col in insp.get_columns("bot_settings")}
+
+        migrations = {
+            "pricelist_header": "TEXT",
+            "pricelist_show_quantities": "BOOLEAN DEFAULT 1",
+            "pricelist_show_brands": "BOOLEAN DEFAULT 1",
+            "pricelist_footer": "TEXT",
+            "pricelist_photo_file_id": "VARCHAR(255)",
+            "pricelist_auto_enabled": "BOOLEAN DEFAULT 0",
+            "pricelist_auto_frequency": "INTEGER DEFAULT 1",
+            "pricelist_time1_hour": "INTEGER DEFAULT 10",
+            "pricelist_time1_minute": "INTEGER DEFAULT 0",
+            "pricelist_time2_hour": "INTEGER DEFAULT 18",
+            "pricelist_time2_minute": "INTEGER DEFAULT 0",
+            "pricelist_time3_hour": "INTEGER DEFAULT 14",
+            "pricelist_time3_minute": "INTEGER DEFAULT 0",
+        }
+
+        for col_name, col_type in migrations.items():
+            if col_name not in existing:
+                connection.execute(text(
+                    f"ALTER TABLE bot_settings ADD COLUMN {col_name} {col_type}"
+                ))
 
     async def get_session(self) -> AsyncSession:
         return self.session_factory()
