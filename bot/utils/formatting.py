@@ -96,9 +96,9 @@ def format_pricelist(
             grouped_cats[cat_name][bname].append(product)
 
         for cat_name, brands_dict in sorted(grouped_cats.items()):
-            lines.append(f"\n{'━' * 18}")
+            lines.append(f"\n━━━━━")
             lines.append(f"📁 <b>{cat_name}</b>")
-            lines.append(f"{'━' * 18}")
+            lines.append(f"━━━━━")
 
             if show_brands:
                 for bname, bproducts in sorted(brands_dict.items()):

@@ -115,15 +115,29 @@ class ChannelService:
             return False
 
     @staticmethod
+    def _find_category_break(text: str, max_pos: int) -> int:
+        """Find last category separator (━━━━━) boundary within max_pos.
+        Returns position of the newline BEFORE the separator, or -1 if not found."""
+        # Look for \n━━━━━ pattern - the newline before separator block
+        search_area = text[:max_pos]
+        pos = search_area.rfind("\n━━━━━")
+        # Also check for \n\n━━━━━ (there's usually an empty line before separator)
+        pos2 = search_area.rfind("\n\n━━━━━")
+        return max(pos, pos2)
+
+    @staticmethod
     def _split_text_for_caption(text: str, max_caption: int = 1024) -> tuple[str, str]:
-        """Split text into caption + remaining, breaking at line boundary"""
+        """Split text into caption + remaining, breaking at category boundary"""
         if len(text) <= max_caption:
             return text, ""
 
-        # Find last newline within the limit
-        cut_pos = text.rfind("\n", 0, max_caption)
+        # Try to split at category boundary first
+        cut_pos = ChannelService._find_category_break(text, max_caption)
+
         if cut_pos <= 0:
-            # No good line break found, cut at limit
+            # No category break found, fall back to last newline
+            cut_pos = text.rfind("\n", 0, max_caption)
+        if cut_pos <= 0:
             cut_pos = max_caption
 
         caption = text[:cut_pos].rstrip()
@@ -131,7 +145,7 @@ class ChannelService:
         return caption, remaining
 
     async def _send_long_text(self, text: str) -> None:
-        """Send text to channel, splitting if too long"""
+        """Send text to channel, splitting at category boundaries if too long"""
         max_length = 4096
         if len(text) <= max_length:
             await self.bot.send_message(
@@ -140,20 +154,38 @@ class ChannelService:
                 parse_mode="HTML"
             )
         else:
-            parts = []
-            current_part = ""
-            for line in text.split("\n"):
-                if len(current_part) + len(line) + 1 > max_length:
-                    parts.append(current_part)
-                    current_part = line
-                else:
-                    current_part += "\n" + line if current_part else line
-            if current_part:
-                parts.append(current_part)
-
+            parts = self._split_at_categories(text, max_length)
             for part in parts:
                 await self.bot.send_message(
                     chat_id=self.channel_id,
-                    text=part,
+                    text=part.strip(),
                     parse_mode="HTML"
                 )
+
+    @staticmethod
+    def _split_at_categories(text: str, max_length: int = 4096) -> list[str]:
+        """Split text into parts, preferring category boundaries"""
+        if len(text) <= max_length:
+            return [text]
+
+        parts = []
+        remaining = text
+
+        while remaining:
+            if len(remaining) <= max_length:
+                parts.append(remaining)
+                break
+
+            # Try category boundary first
+            cut_pos = ChannelService._find_category_break(remaining, max_length)
+
+            if cut_pos <= 0:
+                # Fall back to last newline
+                cut_pos = remaining.rfind("\n", 0, max_length)
+            if cut_pos <= 0:
+                cut_pos = max_length
+
+            parts.append(remaining[:cut_pos].rstrip())
+            remaining = remaining[cut_pos:].lstrip("\n")
+
+        return parts
