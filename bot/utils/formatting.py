@@ -47,7 +47,7 @@ def format_pricelist(
     show_brands: bool = True,
     footer: Optional[str] = None,
 ) -> str:
-    """Format price list with configurable template"""
+    """Format price list with configurable template, grouped by category then brand"""
     header_text = header or "ПРАЙС-ЛИСТ"
     lines = [f"📋 <b>{header_text}</b>"]
 
@@ -62,22 +62,55 @@ def format_pricelist(
         lines.append("Товары не найдены")
         return "\n".join(lines)
 
-    if show_brands and not brand:
-        # Group by brand
-        grouped = {}
-        for product in products:
-            brand_name = product.brand.name
-            if brand_name not in grouped:
-                grouped[brand_name] = []
-            grouped[brand_name].append(product)
-
-        for brand_name, brand_products in sorted(grouped.items()):
-            lines.append(f"\n<b>🏷 {brand_name}</b>")
-            for p in sorted(brand_products, key=lambda x: x.name):
-                lines.append(format_product_short(p, show_quantity=show_quantities))
-    else:
+    if brand:
+        # Single brand - just list products
         for p in sorted(products, key=lambda x: x.name):
             lines.append(format_product_short(p, show_quantity=show_quantities))
+    elif category:
+        # Single category - group by brand
+        if show_brands:
+            grouped_brands = {}
+            for product in products:
+                bname = product.brand.name
+                if bname not in grouped_brands:
+                    grouped_brands[bname] = []
+                grouped_brands[bname].append(product)
+
+            for bname, bproducts in sorted(grouped_brands.items()):
+                lines.append(f"\n<b>🏷 {bname}</b>")
+                for p in sorted(bproducts, key=lambda x: x.name):
+                    lines.append(format_product_short(p, show_quantity=show_quantities))
+        else:
+            for p in sorted(products, key=lambda x: x.name):
+                lines.append(format_product_short(p, show_quantity=show_quantities))
+    else:
+        # Full pricelist - group by category, then by brand
+        grouped_cats = {}
+        for product in products:
+            cat_name = product.brand.category.name if product.brand.category else "Без категории"
+            if cat_name not in grouped_cats:
+                grouped_cats[cat_name] = {}
+            bname = product.brand.name
+            if bname not in grouped_cats[cat_name]:
+                grouped_cats[cat_name][bname] = []
+            grouped_cats[cat_name][bname].append(product)
+
+        for cat_name, brands_dict in sorted(grouped_cats.items()):
+            lines.append(f"\n{'━' * 18}")
+            lines.append(f"📁 <b>{cat_name}</b>")
+            lines.append(f"{'━' * 18}")
+
+            if show_brands:
+                for bname, bproducts in sorted(brands_dict.items()):
+                    lines.append(f"\n  <b>🏷 {bname}</b>")
+                    for p in sorted(bproducts, key=lambda x: x.name):
+                        lines.append(f"  {format_product_short(p, show_quantity=show_quantities)}")
+            else:
+                all_products = []
+                for bproducts in brands_dict.values():
+                    all_products.extend(bproducts)
+                for p in sorted(all_products, key=lambda x: x.name):
+                    lines.append(format_product_short(p, show_quantity=show_quantities))
 
     # Add timestamp
     lines.append(f"\n🕐 Обновлено: {datetime.now().strftime('%d.%m.%Y %H:%M')}")

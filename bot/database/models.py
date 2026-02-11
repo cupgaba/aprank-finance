@@ -257,6 +257,16 @@ class BotSettings(Base):
     pricelist_time3_minute: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class SupplyDraft(Base):
+    __tablename__ = "supply_drafts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    admin_telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    data: Mapped[str] = mapped_column(Text)  # JSON string
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class ChannelPost(Base):
     __tablename__ = "channel_posts"
 

@@ -6,7 +6,7 @@ import os
 
 from .models import (
     Base, User, Category, Brand, Product, Supply, SupplyItem,
-    Sale, WriteOff, Reservation, ChannelPost, BotSettings, UserRole, ReservationStatus, WriteOffReason
+    Sale, WriteOff, Reservation, ChannelPost, BotSettings, SupplyDraft, UserRole, ReservationStatus, WriteOffReason
 )
 from ..config import settings
 
@@ -552,6 +552,43 @@ class Database:
                 select(Supply).order_by(Supply.created_at.desc()).limit(limit)
             )
             return result.scalars().all()
+
+    # ==================== SUPPLY DRAFT METHODS ====================
+
+    async def save_supply_draft(self, admin_telegram_id: int, data: str):
+        """Save or update supply draft"""
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(SupplyDraft).where(SupplyDraft.admin_telegram_id == admin_telegram_id)
+            )
+            draft = result.scalar_one_or_none()
+            if draft:
+                draft.data = data
+                draft.updated_at = datetime.utcnow()
+            else:
+                draft = SupplyDraft(admin_telegram_id=admin_telegram_id, data=data)
+                session.add(draft)
+            await session.commit()
+
+    async def get_supply_draft(self, admin_telegram_id: int) -> Optional[str]:
+        """Get supply draft data"""
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(SupplyDraft).where(SupplyDraft.admin_telegram_id == admin_telegram_id)
+            )
+            draft = result.scalar_one_or_none()
+            return draft.data if draft else None
+
+    async def delete_supply_draft(self, admin_telegram_id: int):
+        """Delete supply draft"""
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(SupplyDraft).where(SupplyDraft.admin_telegram_id == admin_telegram_id)
+            )
+            draft = result.scalar_one_or_none()
+            if draft:
+                await session.delete(draft)
+                await session.commit()
 
     # ==================== SALE METHODS ====================
 

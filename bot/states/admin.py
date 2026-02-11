@@ -33,6 +33,7 @@ class AdminStates(StatesGroup):
     supply_confirm = State()
     supply_add_category_name = State()
     supply_add_brand_name = State()
+    supply_edit_item = State()
 
     # Sale states
     sale_select_category = State()

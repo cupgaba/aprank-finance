@@ -2,6 +2,7 @@ from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.context import FSMContext
+import json
 
 from ...database import Database
 from ...database.models import User
@@ -14,20 +15,29 @@ from ...utils.formatting import format_price
 supplies_router = Router()
 
 
-def format_cart(items: list, delivery: float = 0, expenses: float = 0) -> str:
-    """Format cart contents for display"""
+def format_cart(items: list, delivery: float = 0, expenses: float = 0, page: int = 0) -> str:
+    """Format cart contents for display with pagination"""
     if not items:
         return "🛒 <b>Корзина пуста</b>\n\nДобавьте товары в закупку."
 
-    text = "🛒 <b>Корзина закупки</b>\n\n"
+    text = f"🛒 <b>Корзина закупки</b> ({len(items)} поз.)\n\n"
 
     products_total = 0
-    for item in items:
+    per_page = 8
+    start = page * per_page
+    end = min(start + per_page, len(items))
+
+    for i, item in enumerate(items):
         subtotal = item["quantity"] * item["purchase_price"]
         products_total += subtotal
-        cat_brand = f"({item.get('category_name', '')} | {item['brand_name']})"
-        text += f"• {cat_brand} {item['name']} x{item['quantity']} по {item['purchase_price']}₽ = {format_price(subtotal)}\n"
-        text += f"  └ Продажа: {item['sale_price']}₽\n"
+        if start <= i < end:
+            cat_brand = f"({item.get('category_name', '')} | {item['brand_name']})"
+            text += f"<b>{i+1}.</b> {cat_brand} {item['name']} x{item['quantity']} по {item['purchase_price']}₽ = {format_price(subtotal)}\n"
+            text += f"  └ Продажа: {item['sale_price']}₽\n"
+
+    if len(items) > per_page:
+        total_pages = (len(items) - 1) // per_page + 1
+        text += f"\n📄 Стр. {page+1}/{total_pages}\n"
 
     text += f"\n📦 Товары: {format_price(products_total)}"
 
@@ -43,23 +53,111 @@ def format_cart(items: list, delivery: float = 0, expenses: float = 0) -> str:
     return text
 
 
+async def _save_draft(db: Database, user: User, state: FSMContext):
+    """Save supply draft to DB"""
+    data = await state.get_data()
+    items = data.get("supply_items", [])
+    delivery = data.get("supply_delivery", 0)
+    expenses = data.get("supply_expenses", 0)
+    if items:
+        draft_json = json.dumps({"items": items, "delivery": delivery, "expenses": expenses}, ensure_ascii=False)
+        await db.save_supply_draft(user.telegram_id, draft_json)
+    else:
+        await db.delete_supply_draft(user.telegram_id)
+
+
+def _cart_keyboard(items, delivery, expenses, page=0):
+    """Helper to build cart keyboard"""
+    return AdminKeyboards.supply_cart(
+        has_items=len(items) > 0,
+        delivery=delivery,
+        expenses=expenses,
+        items=items,
+        page=page
+    )
+
+
 @supplies_router.callback_query(F.data == "admin:supply:new")
-async def new_supply_start(callback: CallbackQuery, db: Database, is_admin: bool, state: FSMContext):
-    """Start new supply"""
+async def new_supply_start(callback: CallbackQuery, db: Database, user: User, is_admin: bool, state: FSMContext):
+    """Start new supply - check for drafts"""
     if not is_admin:
         await callback.answer("⛔️ Нет доступа", show_alert=True)
         return
 
+    # Check for existing draft
+    draft = await db.get_supply_draft(user.telegram_id)
+    if draft:
+        try:
+            data = json.loads(draft)
+            items = data.get("items", [])
+            delivery = data.get("delivery", 0)
+            expenses = data.get("expenses", 0)
+            if items:
+                builder = InlineKeyboardBuilder()
+                builder.row(InlineKeyboardButton(text=f"📋 Восстановить черновик ({len(items)} поз.)", callback_data="admin:supply:restore_draft"))
+                builder.row(InlineKeyboardButton(text="🆕 Начать заново", callback_data="admin:supply:new_empty"))
+                builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:supplies_menu"))
+
+                await callback.message.edit_text(
+                    "📥 <b>Найден черновик закупки!</b>\n\n"
+                    f"В черновике {len(items)} поз. на сумму {format_price(sum(i['quantity'] * i['purchase_price'] for i in items))}\n\n"
+                    "Восстановить или начать заново?",
+                    reply_markup=builder.as_markup(),
+                    parse_mode="HTML"
+                )
+                return
+        except (json.JSONDecodeError, KeyError):
+            pass
+
     # Initialize empty cart
-    await state.update_data(
-        supply_items=[],
-        supply_delivery=0,
-        supply_expenses=0
-    )
+    await state.update_data(supply_items=[], supply_delivery=0, supply_expenses=0)
 
     await callback.message.edit_text(
         format_cart([]),
-        reply_markup=AdminKeyboards.supply_cart(has_items=False),
+        reply_markup=_cart_keyboard([], 0, 0),
+        parse_mode="HTML"
+    )
+
+
+@supplies_router.callback_query(F.data == "admin:supply:restore_draft")
+async def supply_restore_draft(callback: CallbackQuery, db: Database, user: User, is_admin: bool, state: FSMContext):
+    """Restore supply from draft"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    draft = await db.get_supply_draft(user.telegram_id)
+    if not draft:
+        await callback.answer("❌ Черновик не найден", show_alert=True)
+        return
+
+    data = json.loads(draft)
+    items = data.get("items", [])
+    delivery = data.get("delivery", 0)
+    expenses = data.get("expenses", 0)
+
+    await state.update_data(supply_items=items, supply_delivery=delivery, supply_expenses=expenses)
+
+    await callback.message.edit_text(
+        "✅ Черновик восстановлен!\n\n" + format_cart(items, delivery, expenses),
+        reply_markup=_cart_keyboard(items, delivery, expenses),
+        parse_mode="HTML"
+    )
+
+
+@supplies_router.callback_query(F.data == "admin:supply:new_empty")
+async def supply_new_empty(callback: CallbackQuery, db: Database, user: User, is_admin: bool, state: FSMContext):
+    """Start fresh supply, deleting draft"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    await db.delete_supply_draft(user.telegram_id)
+    await state.update_data(supply_items=[], supply_delivery=0, supply_expenses=0)
+
+    await callback.message.edit_text(
+        format_cart([]),
+        reply_markup=_cart_keyboard([], 0, 0),
         parse_mode="HTML"
     )
 
@@ -193,6 +291,9 @@ async def supply_products_entered(message: Message, db: Database, state: FSMCont
     await state.update_data(supply_items=items)
     await state.set_state(None)
 
+    # Save draft
+    await _save_draft(db, await db.get_user_by_telegram_id(message.from_user.id), state)
+
     # Build response
     result = ""
     if added > 0:
@@ -206,11 +307,134 @@ async def supply_products_entered(message: Message, db: Database, state: FSMCont
 
     await message.answer(
         result + format_cart(items, delivery, expenses),
-        reply_markup=AdminKeyboards.supply_cart(
-            has_items=len(items) > 0,
-            delivery=delivery,
-            expenses=expenses
-        ),
+        reply_markup=_cart_keyboard(items, delivery, expenses),
+        parse_mode="HTML"
+    )
+
+
+@supplies_router.callback_query(F.data.startswith("admin:supply:del_item:"))
+async def supply_delete_item(callback: CallbackQuery, db: Database, user: User, is_admin: bool, state: FSMContext):
+    """Delete an item from cart"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    idx = int(callback.data.split(":")[-1])
+    data = await state.get_data()
+    items = data.get("supply_items", [])
+    delivery = data.get("supply_delivery", 0)
+    expenses = data.get("supply_expenses", 0)
+
+    if 0 <= idx < len(items):
+        removed = items.pop(idx)
+        await state.update_data(supply_items=items)
+        await _save_draft(db, user, state)
+        await callback.answer(f"🗑 Удалено: {removed['name']}")
+    else:
+        await callback.answer("❌ Элемент не найден", show_alert=True)
+        return
+
+    await callback.message.edit_text(
+        format_cart(items, delivery, expenses),
+        reply_markup=_cart_keyboard(items, delivery, expenses),
+        parse_mode="HTML"
+    )
+
+
+@supplies_router.callback_query(F.data.startswith("admin:supply:edit_item:"))
+async def supply_edit_item(callback: CallbackQuery, is_admin: bool, state: FSMContext):
+    """Edit an item in cart"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    idx = int(callback.data.split(":")[-1])
+    data = await state.get_data()
+    items = data.get("supply_items", [])
+
+    if 0 <= idx < len(items):
+        item = items[idx]
+        await state.set_state(AdminStates.supply_edit_item)
+        await state.update_data(supply_edit_index=idx)
+
+        await callback.message.edit_text(
+            f"✏️ <b>Редактирование позиции #{idx+1}</b>\n\n"
+            f"📦 {item['name']}\n"
+            f"🏷 {item.get('category_name', '')} | {item['brand_name']}\n"
+            f"💵 Закупка: {item['purchase_price']}₽\n"
+            f"💰 Продажа: {item['sale_price']}₽\n"
+            f"📊 Количество: {item['quantity']} шт.\n\n"
+            "Введите новые значения в формате:\n"
+            "<code>закупка продажа кол-во</code>\n\n"
+            "Например: <code>150 280 5</code>",
+            parse_mode="HTML"
+        )
+    else:
+        await callback.answer("❌ Элемент не найден", show_alert=True)
+
+
+@supplies_router.message(AdminStates.supply_edit_item)
+async def supply_edit_item_process(message: Message, db: Database, state: FSMContext):
+    """Process edited item values"""
+    data = await state.get_data()
+    idx = data.get("supply_edit_index", -1)
+    items = data.get("supply_items", [])
+    delivery = data.get("supply_delivery", 0)
+    expenses = data.get("supply_expenses", 0)
+
+    if idx < 0 or idx >= len(items):
+        await message.answer("❌ Ошибка. Попробуйте снова.")
+        await state.set_state(None)
+        return
+
+    parts = message.text.strip().split()
+    try:
+        if len(parts) == 3:
+            purchase = float(parts[0].replace(",", "."))
+            sale = float(parts[1].replace(",", "."))
+            qty = int(parts[2])
+        else:
+            raise ValueError()
+
+        if purchase < 0 or sale < 0 or qty <= 0:
+            raise ValueError()
+    except (ValueError, IndexError):
+        await message.answer("❌ Формат: <code>закупка продажа кол-во</code>\nНапример: <code>150 280 5</code>", parse_mode="HTML")
+        return
+
+    items[idx]["purchase_price"] = purchase
+    items[idx]["sale_price"] = sale
+    items[idx]["quantity"] = qty
+
+    await state.update_data(supply_items=items)
+    await state.set_state(None)
+
+    user = await db.get_user_by_telegram_id(message.from_user.id)
+    await _save_draft(db, user, state)
+
+    await message.answer(
+        f"✅ Позиция #{idx+1} обновлена!\n\n" + format_cart(items, delivery, expenses),
+        reply_markup=_cart_keyboard(items, delivery, expenses),
+        parse_mode="HTML"
+    )
+
+
+@supplies_router.callback_query(F.data.startswith("admin:supply:cart_page:"))
+async def supply_cart_page(callback: CallbackQuery, is_admin: bool, state: FSMContext):
+    """Cart pagination"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    page = int(callback.data.split(":")[-1])
+    data = await state.get_data()
+    items = data.get("supply_items", [])
+    delivery = data.get("supply_delivery", 0)
+    expenses = data.get("supply_expenses", 0)
+
+    await callback.message.edit_text(
+        format_cart(items, delivery, expenses, page=page),
+        reply_markup=_cart_keyboard(items, delivery, expenses, page=page),
         parse_mode="HTML"
     )
 
@@ -232,7 +456,7 @@ async def supply_set_delivery(callback: CallbackQuery, is_admin: bool, state: FS
 
 
 @supplies_router.message(AdminStates.supply_enter_delivery)
-async def supply_delivery_entered(message: Message, state: FSMContext):
+async def supply_delivery_entered(message: Message, db: Database, state: FSMContext):
     """Process delivery cost"""
     try:
         delivery = float(message.text.strip().replace(",", ".").replace(" ", ""))
@@ -249,13 +473,11 @@ async def supply_delivery_entered(message: Message, state: FSMContext):
     await state.update_data(supply_delivery=delivery)
     await state.set_state(None)
 
+    await _save_draft(db, await db.get_user_by_telegram_id(message.from_user.id), state)
+
     await message.answer(
         f"✅ Доставка: {format_price(delivery)}\n\n" + format_cart(items, delivery, expenses),
-        reply_markup=AdminKeyboards.supply_cart(
-            has_items=len(items) > 0,
-            delivery=delivery,
-            expenses=expenses
-        ),
+        reply_markup=_cart_keyboard(items, delivery, expenses),
         parse_mode="HTML"
     )
 
@@ -277,7 +499,7 @@ async def supply_set_expenses(callback: CallbackQuery, is_admin: bool, state: FS
 
 
 @supplies_router.message(AdminStates.supply_enter_expenses)
-async def supply_expenses_entered(message: Message, state: FSMContext):
+async def supply_expenses_entered(message: Message, db: Database, state: FSMContext):
     """Process additional expenses"""
     try:
         expenses = float(message.text.strip().replace(",", ".").replace(" ", ""))
@@ -294,13 +516,11 @@ async def supply_expenses_entered(message: Message, state: FSMContext):
     await state.update_data(supply_expenses=expenses)
     await state.set_state(None)
 
+    await _save_draft(db, await db.get_user_by_telegram_id(message.from_user.id), state)
+
     await message.answer(
         f"✅ Расходы: {format_price(expenses)}\n\n" + format_cart(items, delivery, expenses),
-        reply_markup=AdminKeyboards.supply_cart(
-            has_items=len(items) > 0,
-            delivery=delivery,
-            expenses=expenses
-        ),
+        reply_markup=_cart_keyboard(items, delivery, expenses),
         parse_mode="HTML"
     )
 
@@ -348,11 +568,7 @@ async def supply_back_to_cart(callback: CallbackQuery, is_admin: bool, state: FS
 
     await callback.message.edit_text(
         format_cart(items, delivery, expenses),
-        reply_markup=AdminKeyboards.supply_cart(
-            has_items=len(items) > 0,
-            delivery=delivery,
-            expenses=expenses
-        ),
+        reply_markup=_cart_keyboard(items, delivery, expenses),
         parse_mode="HTML"
     )
 
@@ -421,7 +637,6 @@ async def supply_confirm(callback: CallbackQuery, db: Database, user: User, bot:
 
             if existing and merge_mode:
                 # Add to existing product quantity
-                old_qty = existing.quantity
                 product = await db.update_product(
                     existing.id,
                     quantity=existing.quantity + item["quantity"],
@@ -429,7 +644,6 @@ async def supply_confirm(callback: CallbackQuery, db: Database, user: User, bot:
                     sale_price=item["sale_price"]
                 )
                 updated_products.append((product, item["quantity"]))
-                await logger.log_product_updated(product, user, "quantity", old_qty, product.quantity)
             else:
                 # Create new product
                 product = await db.create_product(
@@ -440,7 +654,6 @@ async def supply_confirm(callback: CallbackQuery, db: Database, user: User, bot:
                     quantity=item["quantity"]
                 )
                 created_products.append(product)
-                await logger.log_product_created(product, user)
 
             supply_items.append({
                 "product_id": product.id,
@@ -454,15 +667,22 @@ async def supply_confirm(callback: CallbackQuery, db: Database, user: User, bot:
             return
 
     # Create supply record for history
-    await db.create_supply_record(
+    supply = await db.create_supply_record(
         items=supply_items,
         delivery=delivery,
         expenses=expenses,
         created_by_id=user.id
     )
 
+    # Log as single supply message
+    supply_obj = await db.get_supply_by_id(supply.id)
+    if supply_obj:
+        await logger.log_supply(supply_obj, user)
+
     total = products_total + delivery + expenses
 
+    # Delete draft
+    await db.delete_supply_draft(user.telegram_id)
     await state.clear()
 
     # Format result
@@ -542,16 +762,25 @@ async def supply_create_new(callback: CallbackQuery, is_admin: bool, state: FSMC
 
 
 @supplies_router.callback_query(F.data == "admin:supply:cancel")
-async def supply_cancel(callback: CallbackQuery, is_admin: bool, state: FSMContext):
-    """Cancel supply"""
+async def supply_cancel(callback: CallbackQuery, db: Database, user: User, is_admin: bool, state: FSMContext):
+    """Cancel supply - draft is kept for later"""
     if not is_admin:
         await callback.answer("⛔️ Нет доступа", show_alert=True)
         return
 
+    # Save draft before clearing (so user can restore later)
+    data = await state.get_data()
+    items = data.get("supply_items", [])
+    if items:
+        await _save_draft(db, user, state)
+        note = "\n💾 Черновик сохранён — можно восстановить позже."
+    else:
+        note = ""
+
     await state.clear()
     await callback.message.edit_text(
-        "📥 <b>Закупки</b>\n\n"
-        "Закупка отменена.",
+        f"📥 <b>Закупки</b>\n\n"
+        f"Закупка отменена.{note}",
         reply_markup=AdminKeyboards.supplies_menu(),
         parse_mode="HTML"
     )
