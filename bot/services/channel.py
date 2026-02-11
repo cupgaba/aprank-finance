@@ -86,7 +86,7 @@ class ChannelService:
 
             # If there's a photo, send photo + text
             if photo_file_id:
-                # Caption limit is 1024 chars, so if text is longer send separately
+                # Caption limit is 1024 chars, so if text is longer split it
                 if len(text) <= 1024:
                     await self.bot.send_photo(
                         chat_id=self.channel_id,
@@ -95,13 +95,16 @@ class ChannelService:
                         parse_mode="HTML"
                     )
                 else:
-                    # Send photo first, then text
+                    # Split text: first part as photo caption, rest as follow-up
+                    caption, remaining = self._split_text_for_caption(text, 1024)
                     await self.bot.send_photo(
                         chat_id=self.channel_id,
                         photo=photo_file_id,
+                        caption=caption,
                         parse_mode="HTML"
                     )
-                    await self._send_long_text(text)
+                    if remaining:
+                        await self._send_long_text(remaining)
             else:
                 await self._send_long_text(text)
 
@@ -110,6 +113,22 @@ class ChannelService:
         except Exception as e:
             print(f"Failed to publish pricelist: {e}")
             return False
+
+    @staticmethod
+    def _split_text_for_caption(text: str, max_caption: int = 1024) -> tuple[str, str]:
+        """Split text into caption + remaining, breaking at line boundary"""
+        if len(text) <= max_caption:
+            return text, ""
+
+        # Find last newline within the limit
+        cut_pos = text.rfind("\n", 0, max_caption)
+        if cut_pos <= 0:
+            # No good line break found, cut at limit
+            cut_pos = max_caption
+
+        caption = text[:cut_pos].rstrip()
+        remaining = text[cut_pos:].lstrip("\n")
+        return caption, remaining
 
     async def _send_long_text(self, text: str) -> None:
         """Send text to channel, splitting if too long"""

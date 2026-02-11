@@ -271,28 +271,31 @@ async def pricelist_preview(callback: CallbackQuery, db: Database, bot: Bot, is_
 
     if s.pricelist_photo_file_id:
         # With photo - caption limit is 1024
-        if len(preview_text) > 1000:
-            await callback.message.answer_photo(
-                photo=s.pricelist_photo_file_id,
-                caption="👁 <b>Предпросмотр прайс-листа (с фото):</b>",
-                parse_mode="HTML"
-            )
-            await callback.message.answer(
-                text,
-                reply_markup=AdminKeyboards.pricelist_config(s),
-                parse_mode="HTML"
-            )
-        else:
+        if len(preview_text) <= 1024:
             await callback.message.answer_photo(
                 photo=s.pricelist_photo_file_id,
                 caption=preview_text,
                 parse_mode="HTML"
             )
-            await callback.message.answer(
-                "⚙️ <b>Настройка шаблона прайса</b>",
-                reply_markup=AdminKeyboards.pricelist_config(s),
+        else:
+            # Split: first part as caption, rest as follow-up
+            from ...services.channel import ChannelService
+            caption, remaining = ChannelService._split_text_for_caption(preview_text, 1024)
+            await callback.message.answer_photo(
+                photo=s.pricelist_photo_file_id,
+                caption=caption,
                 parse_mode="HTML"
             )
+            if remaining:
+                await callback.message.answer(
+                    remaining,
+                    parse_mode="HTML"
+                )
+        await callback.message.answer(
+            "⚙️ <b>Настройка шаблона прайса</b>",
+            reply_markup=AdminKeyboards.pricelist_config(s),
+            parse_mode="HTML"
+        )
     else:
         await callback.message.answer(
             preview_text,
