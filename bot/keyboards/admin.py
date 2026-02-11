@@ -187,49 +187,67 @@ class AdminKeyboards:
         return builder.as_markup()
 
     @staticmethod
-    def supply_cart(has_items: bool = False, delivery: float = 0, expenses: float = 0, items: list = None, page: int = 0) -> InlineKeyboardMarkup:
+    def supply_cart(has_items: bool = False, delivery: float = 0, expenses: float = 0, items_count: int = 0, page: int = 0, per_page: int = 8) -> InlineKeyboardMarkup:
         """Supply cart actions"""
         builder = InlineKeyboardBuilder()
         builder.row(InlineKeyboardButton(text="➕ Добавить товары", callback_data="admin:supply:add_item"))
-        if has_items and items:
-            # Show items with delete buttons (paginated)
-            per_page = 8
-            total = len(items)
-            start = page * per_page
-            end = min(start + per_page, total)
-            page_items = items[start:end]
-
-            for idx in range(start, end):
-                item = items[idx]
-                name = item['name'][:20]
-                builder.row(
-                    InlineKeyboardButton(
-                        text=f"{idx+1}. {name} x{item['quantity']}",
-                        callback_data=f"admin:supply:edit_item:{idx}"
-                    ),
-                    InlineKeyboardButton(
-                        text="🗑",
-                        callback_data=f"admin:supply:del_item:{idx}"
-                    )
-                )
-
-            # Pagination for items
-            if total > per_page:
+        if has_items:
+            builder.row(InlineKeyboardButton(
+                text=f"✏️ Редактировать закупку ({items_count} поз.)",
+                callback_data="admin:supply:edit_items"
+            ))
+            # Text pagination for cart display
+            if items_count > per_page:
+                total_pages = (items_count - 1) // per_page + 1
                 nav = []
                 if page > 0:
                     nav.append(InlineKeyboardButton(text="◀️", callback_data=f"admin:supply:cart_page:{page-1}"))
-                nav.append(InlineKeyboardButton(text=f"{page+1}/{(total-1)//per_page+1}", callback_data="noop"))
-                if end < total:
+                nav.append(InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data="noop"))
+                if page + 1 < total_pages:
                     nav.append(InlineKeyboardButton(text="▶️", callback_data=f"admin:supply:cart_page:{page+1}"))
                 builder.row(*nav)
-
-        if has_items:
             delivery_text = f"🚚 Доставка: {delivery}₽" if delivery > 0 else "🚚 Добавить доставку"
             expenses_text = f"📋 Расходы: {expenses}₽" if expenses > 0 else "📋 Добавить расходы"
             builder.row(InlineKeyboardButton(text=delivery_text, callback_data="admin:supply:delivery"))
             builder.row(InlineKeyboardButton(text=expenses_text, callback_data="admin:supply:expenses"))
             builder.row(InlineKeyboardButton(text="✅ Завершить закупку", callback_data="admin:supply:finish"))
         builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="admin:supply:cancel"))
+        return builder.as_markup()
+
+    @staticmethod
+    def supply_edit_items(items: list, page: int = 0) -> InlineKeyboardMarkup:
+        """Edit items list with pagination, edit and delete buttons"""
+        builder = InlineKeyboardBuilder()
+        per_page = 8
+        total = len(items)
+        start = page * per_page
+        end = min(start + per_page, total)
+
+        for idx in range(start, end):
+            item = items[idx]
+            name = item['name'][:20]
+            builder.row(
+                InlineKeyboardButton(
+                    text=f"{idx+1}. {name} x{item['quantity']} ({item['purchase_price']}₽)",
+                    callback_data=f"admin:supply:edit_item:{idx}"
+                ),
+                InlineKeyboardButton(
+                    text="🗑",
+                    callback_data=f"admin:supply:del_item:{idx}"
+                )
+            )
+
+        # Pagination
+        if total > per_page:
+            nav = []
+            if page > 0:
+                nav.append(InlineKeyboardButton(text="◀️", callback_data=f"admin:supply:edit_page:{page-1}"))
+            nav.append(InlineKeyboardButton(text=f"{page+1}/{(total-1)//per_page+1}", callback_data="noop"))
+            if end < total:
+                nav.append(InlineKeyboardButton(text="▶️", callback_data=f"admin:supply:edit_page:{page+1}"))
+            builder.row(*nav)
+
+        builder.row(InlineKeyboardButton(text="◀️ Назад в корзину", callback_data="admin:supply:back_to_cart"))
         return builder.as_markup()
 
     @staticmethod

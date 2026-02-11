@@ -72,7 +72,7 @@ def _cart_keyboard(items, delivery, expenses, page=0):
         has_items=len(items) > 0,
         delivery=delivery,
         expenses=expenses,
-        items=items,
+        items_count=len(items),
         page=page
     )
 
@@ -312,6 +312,47 @@ async def supply_products_entered(message: Message, db: Database, state: FSMCont
     )
 
 
+@supplies_router.callback_query(F.data == "admin:supply:edit_items")
+async def supply_edit_items_view(callback: CallbackQuery, is_admin: bool, state: FSMContext):
+    """Show edit items screen with paginated item list"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    data = await state.get_data()
+    items = data.get("supply_items", [])
+
+    if not items:
+        await callback.answer("❌ Корзина пуста", show_alert=True)
+        return
+
+    await callback.message.edit_text(
+        f"✏️ <b>Редактирование закупки</b> ({len(items)} поз.)\n\n"
+        "Нажмите на товар для изменения или 🗑 для удаления:",
+        reply_markup=AdminKeyboards.supply_edit_items(items, page=0),
+        parse_mode="HTML"
+    )
+
+
+@supplies_router.callback_query(F.data.startswith("admin:supply:edit_page:"))
+async def supply_edit_items_page(callback: CallbackQuery, is_admin: bool, state: FSMContext):
+    """Pagination for edit items screen"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    page = int(callback.data.split(":")[-1])
+    data = await state.get_data()
+    items = data.get("supply_items", [])
+
+    await callback.message.edit_text(
+        f"✏️ <b>Редактирование закупки</b> ({len(items)} поз.)\n\n"
+        "Нажмите на товар для изменения или 🗑 для удаления:",
+        reply_markup=AdminKeyboards.supply_edit_items(items, page=page),
+        parse_mode="HTML"
+    )
+
+
 @supplies_router.callback_query(F.data.startswith("admin:supply:del_item:"))
 async def supply_delete_item(callback: CallbackQuery, db: Database, user: User, is_admin: bool, state: FSMContext):
     """Delete an item from cart"""
@@ -322,8 +363,6 @@ async def supply_delete_item(callback: CallbackQuery, db: Database, user: User, 
     idx = int(callback.data.split(":")[-1])
     data = await state.get_data()
     items = data.get("supply_items", [])
-    delivery = data.get("supply_delivery", 0)
-    expenses = data.get("supply_expenses", 0)
 
     if 0 <= idx < len(items):
         removed = items.pop(idx)
@@ -334,11 +373,28 @@ async def supply_delete_item(callback: CallbackQuery, db: Database, user: User, 
         await callback.answer("❌ Элемент не найден", show_alert=True)
         return
 
-    await callback.message.edit_text(
-        format_cart(items, delivery, expenses),
-        reply_markup=_cart_keyboard(items, delivery, expenses),
-        parse_mode="HTML"
-    )
+    if not items:
+        # Cart is now empty, go back to cart view
+        delivery = data.get("supply_delivery", 0)
+        expenses = data.get("supply_expenses", 0)
+        await callback.message.edit_text(
+            format_cart(items, delivery, expenses),
+            reply_markup=_cart_keyboard(items, delivery, expenses),
+            parse_mode="HTML"
+        )
+    else:
+        # Stay on edit items screen
+        # Calculate page from deleted index, adjust if last page became empty
+        per_page = 8
+        page = idx // per_page
+        max_page = (len(items) - 1) // per_page
+        page = min(page, max_page)
+        await callback.message.edit_text(
+            f"✏️ <b>Редактирование закупки</b> ({len(items)} поз.)\n\n"
+            "Нажмите на товар для изменения или 🗑 для удаления:",
+            reply_markup=AdminKeyboards.supply_edit_items(items, page=page),
+            parse_mode="HTML"
+        )
 
 
 @supplies_router.callback_query(F.data.startswith("admin:supply:edit_item:"))
@@ -379,8 +435,6 @@ async def supply_edit_item_process(message: Message, db: Database, state: FSMCon
     data = await state.get_data()
     idx = data.get("supply_edit_index", -1)
     items = data.get("supply_items", [])
-    delivery = data.get("supply_delivery", 0)
-    expenses = data.get("supply_expenses", 0)
 
     if idx < 0 or idx >= len(items):
         await message.answer("❌ Ошибка. Попробуйте снова.")
@@ -412,16 +466,21 @@ async def supply_edit_item_process(message: Message, db: Database, state: FSMCon
     user = await db.get_user_by_telegram_id(message.from_user.id)
     await _save_draft(db, user, state)
 
+    # Go back to edit items screen
+    per_page = 8
+    page = idx // per_page
     await message.answer(
-        f"✅ Позиция #{idx+1} обновлена!\n\n" + format_cart(items, delivery, expenses),
-        reply_markup=_cart_keyboard(items, delivery, expenses),
+        f"✅ Позиция #{idx+1} обновлена!\n\n"
+        f"✏️ <b>Редактирование закупки</b> ({len(items)} поз.)\n\n"
+        "Нажмите на товар для изменения или 🗑 для удаления:",
+        reply_markup=AdminKeyboards.supply_edit_items(items, page=page),
         parse_mode="HTML"
     )
 
 
 @supplies_router.callback_query(F.data.startswith("admin:supply:cart_page:"))
 async def supply_cart_page(callback: CallbackQuery, is_admin: bool, state: FSMContext):
-    """Cart pagination"""
+    """Cart text pagination"""
     if not is_admin:
         await callback.answer("⛔️ Нет доступа", show_alert=True)
         return
