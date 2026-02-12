@@ -273,15 +273,26 @@ async def supply_products_entered(message: Message, db: Database, state: FSMCont
                 errors.append(f"❌ '{name}' - некорректные значения")
                 continue
 
-            items.append({
-                "brand_id": brand_id,
-                "brand_name": brand.name,
-                "category_name": category.name,
-                "name": name,
-                "purchase_price": purchase_price,
-                "sale_price": sale_price,
-                "quantity": quantity
-            })
+            # Check for existing item with same name and brand
+            existing_idx = next(
+                (i for i, it in enumerate(items)
+                 if it["brand_id"] == brand_id and it["name"].lower() == name.lower()),
+                None
+            )
+            if existing_idx is not None:
+                items[existing_idx]["quantity"] += quantity
+                items[existing_idx]["purchase_price"] = purchase_price
+                items[existing_idx]["sale_price"] = sale_price
+            else:
+                items.append({
+                    "brand_id": brand_id,
+                    "brand_name": brand.name,
+                    "category_name": category.name,
+                    "name": name,
+                    "purchase_price": purchase_price,
+                    "sale_price": sale_price,
+                    "quantity": quantity
+                })
             added += 1
 
         except (ValueError, IndexError):

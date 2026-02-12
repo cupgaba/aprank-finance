@@ -135,6 +135,8 @@ class Supply(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     supplier_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     total_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    delivery_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    extra_expenses: Mapped[float] = mapped_column(Float, default=0.0)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -255,6 +257,12 @@ class BotSettings(Base):
     pricelist_time2_minute: Mapped[int] = mapped_column(Integer, default=0)
     pricelist_time3_hour: Mapped[int] = mapped_column(Integer, default=14)
     pricelist_time3_minute: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Last pricelist message IDs (JSON list of message_ids for deletion)
+    pricelist_last_message_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=None)
+
+    # Max reservations per user
+    max_reservations_per_user: Mapped[int] = mapped_column(Integer, default=3)
 
 
 class SupplyDraft(Base):

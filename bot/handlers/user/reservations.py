@@ -44,9 +44,18 @@ async def reserve_product_start(callback: CallbackQuery, db: Database, user: Use
             await callback.answer("❌ У вас уже есть резерв на этот товар", show_alert=True)
             return
 
-    await state.update_data(product_id=product_id)
-
     s = await db.get_settings()
+
+    # Check max reservations limit
+    max_res = s.max_reservations_per_user
+    if len(user_reservations) >= max_res:
+        await callback.answer(
+            f"❌ Максимум {max_res} активных резервов. Отмените один из существующих.",
+            show_alert=True
+        )
+        return
+
+    await state.update_data(product_id=product_id)
     text = (
         f"📌 <b>Резервирование товара</b>\n\n"
         f"{format_product(product)}\n\n"

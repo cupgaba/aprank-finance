@@ -1,4 +1,5 @@
 from typing import Optional
+import json
 from aiogram import Bot
 
 from ..config import settings
@@ -58,6 +59,21 @@ class ChannelService:
             print(f"Failed to mark product sold: {e}")
             return False
 
+    async def _delete_old_pricelist(self, settings: BotSettings):
+        """Delete previous pricelist messages from channel"""
+        if not settings.pricelist_last_message_ids:
+            return
+
+        try:
+            msg_ids = json.loads(settings.pricelist_last_message_ids)
+            for msg_id in msg_ids:
+                try:
+                    await self.bot.delete_message(chat_id=self.channel_id, message_id=msg_id)
+                except Exception:
+                    pass
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     async def publish_pricelist(self, settings: Optional[BotSettings] = None) -> bool:
         """Publish full price list to channel with template settings"""
         if not self.channel_id:
@@ -74,6 +90,9 @@ class ChannelService:
             if settings is None:
                 settings = await self.db.get_settings()
 
+            # Delete old pricelist messages
+            await self._delete_old_pricelist(settings)
+
             text = format_pricelist(
                 products,
                 header=settings.pricelist_header,
@@ -83,30 +102,40 @@ class ChannelService:
             )
 
             photo_file_id = settings.pricelist_photo_file_id
+            sent_message_ids = []
 
             # If there's a photo, send photo + text
             if photo_file_id:
                 # Caption limit is 1024 chars, so if text is longer split it
                 if len(text) <= 1024:
-                    await self.bot.send_photo(
+                    msg = await self.bot.send_photo(
                         chat_id=self.channel_id,
                         photo=photo_file_id,
                         caption=text,
                         parse_mode="HTML"
                     )
+                    sent_message_ids.append(msg.message_id)
                 else:
                     # Split text: first part as photo caption, rest as follow-up
                     caption, remaining = self._split_text_for_caption(text, 1024)
-                    await self.bot.send_photo(
+                    msg = await self.bot.send_photo(
                         chat_id=self.channel_id,
                         photo=photo_file_id,
                         caption=caption,
                         parse_mode="HTML"
                     )
+                    sent_message_ids.append(msg.message_id)
                     if remaining:
-                        await self._send_long_text(remaining)
+                        ids = await self._send_long_text(remaining)
+                        sent_message_ids.extend(ids)
             else:
-                await self._send_long_text(text)
+                ids = await self._send_long_text(text)
+                sent_message_ids.extend(ids)
+
+            # Save message IDs for future deletion
+            await self.db.update_settings(
+                pricelist_last_message_ids=json.dumps(sent_message_ids)
+            )
 
             return True
 
@@ -116,14 +145,19 @@ class ChannelService:
 
     @staticmethod
     def _find_category_break(text: str, max_pos: int) -> int:
-        """Find last category separator (━━━━━) boundary within max_pos.
-        Returns position of the newline BEFORE the separator, or -1 if not found."""
-        # Look for \n━━━━━ pattern - the newline before separator block
+        """Find last category block start within max_pos.
+        Category blocks start with: \\n━━━━━\\n📁
+        Returns position to cut at (before the block), or -1 if not found."""
         search_area = text[:max_pos]
-        pos = search_area.rfind("\n━━━━━")
-        # Also check for \n\n━━━━━ (there's usually an empty line before separator)
-        pos2 = search_area.rfind("\n\n━━━━━")
-        return max(pos, pos2)
+        # Find the opening separator followed by category icon
+        marker = "\n━━━━━\n📁"
+        pos = search_area.rfind(marker)
+        if pos > 0:
+            # Go back to include the empty line before separator
+            if pos >= 2 and text[pos-1:pos+1] == "\n\n":
+                return pos - 1
+            return pos
+        return -1
 
     @staticmethod
     def _split_text_for_caption(text: str, max_caption: int = 1024) -> tuple[str, str]:
@@ -144,23 +178,27 @@ class ChannelService:
         remaining = text[cut_pos:].lstrip("\n")
         return caption, remaining
 
-    async def _send_long_text(self, text: str) -> None:
-        """Send text to channel, splitting at category boundaries if too long"""
+    async def _send_long_text(self, text: str) -> list[int]:
+        """Send text to channel, splitting at category boundaries if too long. Returns message IDs."""
+        sent_ids = []
         max_length = 4096
         if len(text) <= max_length:
-            await self.bot.send_message(
+            msg = await self.bot.send_message(
                 chat_id=self.channel_id,
                 text=text,
                 parse_mode="HTML"
             )
+            sent_ids.append(msg.message_id)
         else:
             parts = self._split_at_categories(text, max_length)
             for part in parts:
-                await self.bot.send_message(
+                msg = await self.bot.send_message(
                     chat_id=self.channel_id,
                     text=part.strip(),
                     parse_mode="HTML"
                 )
+                sent_ids.append(msg.message_id)
+        return sent_ids
 
     @staticmethod
     def _split_at_categories(text: str, max_length: int = 4096) -> list[str]:

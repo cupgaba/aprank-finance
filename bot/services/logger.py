@@ -1,9 +1,16 @@
 from typing import Optional
 from datetime import datetime
 from aiogram import Bot
+import pytz
 
 from ..config import settings
 from ..database.models import User, Product, Sale, WriteOff, Reservation, Supply
+
+_tz = pytz.timezone(settings.TIMEZONE)
+
+
+def _now_str() -> str:
+    return datetime.now(_tz).strftime('%d.%m.%Y %H:%M')
 
 
 class LoggerService:
@@ -47,7 +54,7 @@ class LoggerService:
             f"💰 Продажа: {product.sale_price}₽\n"
             f"📊 Количество: {product.quantity} шт.\n\n"
             f"👤 Админ: {admin.full_name}\n"
-            f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+            f"🕐 {_now_str()}"
         )
         await self._send_log(message, "log_products")
 
@@ -73,7 +80,7 @@ class LoggerService:
             f"📦 {product.brand.name} - {product.name}\n"
             f"📝 {field_name}: {old_value} → {new_value}\n\n"
             f"👤 Админ: {admin.full_name}\n"
-            f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+            f"🕐 {_now_str()}"
         )
         await self._send_log(message, "log_products")
 
@@ -83,7 +90,7 @@ class LoggerService:
             f"🗑 <b>Удалён товар</b>\n\n"
             f"📦 {product.brand.name} - {product.name}\n\n"
             f"👤 Админ: {admin.full_name}\n"
-            f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+            f"🕐 {_now_str()}"
         )
         await self._send_log(message, "log_products")
 
@@ -99,7 +106,7 @@ class LoggerService:
         )
         if admin:
             message += f"👤 Админ: {admin.full_name}\n"
-        message += f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        message += f"🕐 {_now_str()}"
         await self._send_log(message, "log_sales")
 
     async def log_supply(self, supply: Supply, admin: Optional[User] = None):
@@ -118,7 +125,7 @@ class LoggerService:
             message += f"🏪 Поставщик: {supply.supplier_name}\n"
         if admin:
             message += f"\n👤 Админ: {admin.full_name}\n"
-        message += f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        message += f"🕐 {_now_str()}"
         await self._send_log(message, "log_supplies")
 
     async def log_writeoff(self, writeoff: WriteOff, admin: Optional[User] = None):
@@ -142,7 +149,7 @@ class LoggerService:
             message += f"📝 Заметки: {writeoff.notes}\n"
         if admin:
             message += f"\n👤 Админ: {admin.full_name}\n"
-        message += f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        message += f"🕐 {_now_str()}"
         await self._send_log(message, "log_writeoffs")
 
     async def log_reservation_created(self, reservation: Reservation):
@@ -173,7 +180,7 @@ class LoggerService:
             f"📦 {product.brand.name} - {product.name}\n"
             f"👤 Покупатель: {reservation.user.full_name}\n\n"
             f"👤 Админ: {admin.full_name}\n"
-            f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+            f"🕐 {_now_str()}"
         )
         await self._send_log(message, "log_reservations")
 
@@ -188,7 +195,7 @@ class LoggerService:
         )
         if admin:
             message += f"\n👤 Админ: {admin.full_name}\n"
-        message += f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        message += f"🕐 {_now_str()}"
         await self._send_log(message, "log_reservations")
 
     async def log_admin_added(self, new_admin: User, by_admin: User):
@@ -201,6 +208,6 @@ class LoggerService:
             message += f"🆔 @{new_admin.username}\n"
         message += (
             f"\n👤 Добавил: {by_admin.full_name}\n"
-            f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+            f"🕐 {_now_str()}"
         )
         await self._send_log(message)

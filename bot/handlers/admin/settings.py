@@ -3,6 +3,7 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 
 from ...database import Database
+from ...database.models import User
 from ...keyboards.admin import AdminKeyboards
 from ...states.admin import AdminStates
 
@@ -218,4 +219,138 @@ async def set_reservation_time(callback: CallbackQuery, db: Database, is_admin: 
     await callback.answer(f"✅ Время резерва: {value} ч.")
     await callback.message.edit_reply_markup(
         reply_markup=AdminKeyboards.settings_reservation(value)
+    )
+
+
+# ==================== MAX RESERVATIONS ====================
+
+
+@settings_router.callback_query(F.data == "admin:settings:max_reservations")
+async def max_reservations_settings(callback: CallbackQuery, db: Database, is_admin: bool = False):
+    """Show max reservations settings"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    s = await db.get_settings()
+    await callback.message.edit_text(
+        "📌 <b>Макс. резервов на пользователя</b>\n\n"
+        "Сколько товаров пользователь может\n"
+        "зарезервировать одновременно:",
+        reply_markup=AdminKeyboards.settings_max_reservations(s.max_reservations_per_user),
+        parse_mode="HTML"
+    )
+
+
+@settings_router.callback_query(F.data.startswith("admin:settings:set_max_res:"))
+async def set_max_reservations(callback: CallbackQuery, db: Database, is_admin: bool = False):
+    """Set max reservations per user"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    value = int(callback.data.split(":")[-1])
+    await db.update_settings(max_reservations_per_user=value)
+    await callback.answer(f"✅ Лимит: {value} резервов")
+    await callback.message.edit_reply_markup(
+        reply_markup=AdminKeyboards.settings_max_reservations(value)
+    )
+
+
+# ==================== BAN MANAGEMENT ====================
+
+
+@settings_router.callback_query(F.data == "admin:settings:bans")
+async def ban_management(callback: CallbackQuery, db: Database, is_admin: bool = False):
+    """Show ban management"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    banned = await db.get_banned_users()
+    await callback.message.edit_text(
+        "🚫 <b>Управление банами</b>\n\n"
+        f"Забаненных: {len(banned)}\n"
+        "Нажмите на пользователя чтобы разбанить:",
+        reply_markup=AdminKeyboards.ban_management(banned),
+        parse_mode="HTML"
+    )
+
+
+@settings_router.callback_query(F.data == "admin:ban:add")
+async def ban_add_start(callback: CallbackQuery, state: FSMContext, is_admin: bool = False):
+    """Start ban process"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    await state.set_state(AdminStates.ban_user_id)
+    await callback.message.edit_text(
+        "🚫 <b>Бан пользователя</b>\n\n"
+        "Отправьте Telegram ID или @username пользователя:",
+        parse_mode="HTML"
+    )
+
+
+@settings_router.message(AdminStates.ban_user_id)
+async def ban_add_process(message: Message, db: Database, state: FSMContext, is_admin: bool = False):
+    """Process ban"""
+    if not is_admin:
+        return
+
+    text = message.text.strip()
+    user = None
+
+    if text.startswith("@"):
+        username = text[1:]
+        user = await db.get_user_by_username(username)
+    else:
+        try:
+            tid = int(text)
+            user = await db.get_user_by_telegram_id(tid)
+        except ValueError:
+            user = await db.get_user_by_username(text)
+
+    if not user:
+        await message.answer(
+            "❌ Пользователь не найден. Он должен хотя бы раз написать боту.\n"
+            "Попробуйте снова или отправьте /admin для отмены.",
+            parse_mode="HTML"
+        )
+        return
+
+    if user.is_admin:
+        await message.answer("❌ Нельзя забанить администратора!")
+        await state.clear()
+        return
+
+    await db.ban_user(user.telegram_id)
+    await state.clear()
+
+    banned = await db.get_banned_users()
+    await message.answer(
+        f"🚫 Пользователь {user.full_name} забанен!",
+        reply_markup=AdminKeyboards.ban_management(banned),
+        parse_mode="HTML"
+    )
+
+
+@settings_router.callback_query(F.data.startswith("admin:ban:remove:"))
+async def ban_remove(callback: CallbackQuery, db: Database, is_admin: bool = False):
+    """Unban user"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    tid = int(callback.data.split(":")[-1])
+    await db.unban_user(tid)
+    await callback.answer("✅ Пользователь разбанен")
+
+    banned = await db.get_banned_users()
+    await callback.message.edit_text(
+        "🚫 <b>Управление банами</b>\n\n"
+        f"Забаненных: {len(banned)}\n"
+        "Нажмите на пользователя чтобы разбанить:",
+        reply_markup=AdminKeyboards.ban_management(banned),
+        parse_mode="HTML"
     )

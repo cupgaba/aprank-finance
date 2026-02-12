@@ -3,6 +3,7 @@ from sqlalchemy import select, func, and_, or_, event, text, inspect
 from datetime import datetime, timedelta
 from typing import Optional, List, Sequence
 import os
+import pytz
 
 from .models import (
     Base, User, Category, Brand, Product, Supply, SupplyItem,
@@ -39,6 +40,7 @@ class Database:
             await conn.run_sync(Base.metadata.create_all)
             # Run migrations for existing tables
             await conn.run_sync(self._migrate_bot_settings)
+            await conn.run_sync(self._migrate_supplies)
 
     @staticmethod
     def _migrate_bot_settings(connection):
@@ -63,12 +65,34 @@ class Database:
             "pricelist_time2_minute": "INTEGER DEFAULT 0",
             "pricelist_time3_hour": "INTEGER DEFAULT 14",
             "pricelist_time3_minute": "INTEGER DEFAULT 0",
+            "pricelist_last_message_ids": "TEXT",
+            "max_reservations_per_user": "INTEGER DEFAULT 3",
         }
 
         for col_name, col_type in migrations.items():
             if col_name not in existing:
                 connection.execute(text(
                     f"ALTER TABLE bot_settings ADD COLUMN {col_name} {col_type}"
+                ))
+
+    @staticmethod
+    def _migrate_supplies(connection):
+        """Add missing columns to supplies table"""
+        insp = inspect(connection)
+        if not insp.has_table("supplies"):
+            return
+
+        existing = {col["name"] for col in insp.get_columns("supplies")}
+
+        migrations = {
+            "delivery_cost": "REAL DEFAULT 0",
+            "extra_expenses": "REAL DEFAULT 0",
+        }
+
+        for col_name, col_type in migrations.items():
+            if col_name not in existing:
+                connection.execute(text(
+                    f"ALTER TABLE supplies ADD COLUMN {col_name} {col_type}"
                 ))
 
     async def get_session(self) -> AsyncSession:
@@ -162,6 +186,44 @@ class Database:
                 await session.commit()
                 await session.refresh(user)
             return user
+
+    async def get_user_by_username(self, username: str) -> Optional[User]:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(User).where(User.username == username)
+            )
+            return result.scalar_one_or_none()
+
+    async def ban_user(self, telegram_id: int) -> Optional[User]:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(User).where(User.telegram_id == telegram_id)
+            )
+            user = result.scalar_one_or_none()
+            if user:
+                user.is_active = False
+                await session.commit()
+                await session.refresh(user)
+            return user
+
+    async def unban_user(self, telegram_id: int) -> Optional[User]:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(User).where(User.telegram_id == telegram_id)
+            )
+            user = result.scalar_one_or_none()
+            if user:
+                user.is_active = True
+                await session.commit()
+                await session.refresh(user)
+            return user
+
+    async def get_banned_users(self) -> Sequence[User]:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(User).where(User.is_active == False)
+            )
+            return result.scalars().all()
 
     # ==================== CATEGORY METHODS ====================
 
@@ -475,6 +537,8 @@ class Database:
 
             supply = Supply(
                 total_amount=total_amount,
+                delivery_cost=delivery,
+                extra_expenses=expenses,
                 notes=f"Доставка: {delivery}₽, Расходы: {expenses}₽" if delivery or expenses else None,
                 created_by_id=created_by_id
             )
@@ -641,8 +705,11 @@ class Database:
             return result.scalars().all()
 
     async def get_today_sales(self) -> Sequence[Sale]:
-        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-        return await self.get_sales_by_period(today)
+        from ..config import settings as app_settings
+        tz = pytz.timezone(app_settings.TIMEZONE)
+        today_local = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+        today_utc = today_local.astimezone(pytz.utc).replace(tzinfo=None)
+        return await self.get_sales_by_period(today_utc)
 
     async def get_sales_statistics(
         self,
@@ -794,6 +861,8 @@ class Database:
             supplies = result.scalars().all()
 
             total_supply_amount = sum(s.total_amount for s in supplies)
+            total_delivery_cost = sum(getattr(s, 'delivery_cost', 0) or 0 for s in supplies)
+            total_extra_expenses = sum(getattr(s, 'extra_expenses', 0) or 0 for s in supplies)
             total_supply_items = sum(
                 sum(item.quantity for item in s.items) if s.items else 0
                 for s in supplies
@@ -830,6 +899,8 @@ class Database:
                 "top_products": top_products,
                 "supplies_count": len(supplies),
                 "total_supply_amount": total_supply_amount,
+                "total_delivery_cost": total_delivery_cost,
+                "total_extra_expenses": total_extra_expenses,
                 "total_supply_items": total_supply_items,
                 "writeoffs_count": len(writeoffs),
                 "total_writeoff_items": total_writeoff_items,

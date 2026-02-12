@@ -486,6 +486,8 @@ class AdminKeyboards:
         builder.row(InlineKeyboardButton(text="⏰ Настройки напоминаний", callback_data="admin:settings:reminders"))
         builder.row(InlineKeyboardButton(text="📦 Порог низкого остатка", callback_data="admin:settings:low_stock"))
         builder.row(InlineKeyboardButton(text="🔔 Время резерва", callback_data="admin:settings:reservation"))
+        builder.row(InlineKeyboardButton(text="📌 Макс. резервов", callback_data="admin:settings:max_reservations"))
+        builder.row(InlineKeyboardButton(text="🚫 Управление банами", callback_data="admin:settings:bans"))
         return builder.as_markup()
 
     @staticmethod
@@ -559,6 +561,40 @@ class AdminKeyboards:
                 callback_data=f"admin:settings:set_reservation:{v}"
             ))
         builder.row(*row)
+        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:settings_menu"))
+        return builder.as_markup()
+
+    @staticmethod
+    def settings_max_reservations(current: int) -> InlineKeyboardMarkup:
+        """Max reservations per user settings"""
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(
+            text=f"Текущий лимит: {current}",
+            callback_data="noop"
+        ))
+        row = []
+        for v in [1, 2, 3, 5, 10]:
+            icon = "✅ " if v == current else ""
+            row.append(InlineKeyboardButton(
+                text=f"{icon}{v}",
+                callback_data=f"admin:settings:set_max_res:{v}"
+            ))
+        builder.row(*row)
+        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:settings_menu"))
+        return builder.as_markup()
+
+    @staticmethod
+    def ban_management(banned_users: Sequence = None) -> InlineKeyboardMarkup:
+        """Ban management menu"""
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="🚫 Забанить пользователя", callback_data="admin:ban:add"))
+        if banned_users:
+            for u in banned_users:
+                name = u.full_name
+                builder.row(InlineKeyboardButton(
+                    text=f"❌ {name} (@{u.username or u.telegram_id})",
+                    callback_data=f"admin:ban:remove:{u.telegram_id}"
+                ))
         builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:settings_menu"))
         return builder.as_markup()
 

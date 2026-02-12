@@ -1,7 +1,11 @@
 from typing import Sequence, Optional
 from datetime import datetime
+import pytz
 
+from ..config import settings
 from ..database.models import Product, Category, Brand, Reservation, WriteOffReason
+
+_tz = pytz.timezone(settings.TIMEZONE)
 
 
 def format_price(price: float) -> str:
@@ -113,7 +117,7 @@ def format_pricelist(
                     lines.append(format_product_short(p, show_quantity=show_quantities))
 
     # Add timestamp
-    lines.append(f"\n🕐 Обновлено: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+    lines.append(f"\n🕐 Обновлено: {datetime.now(_tz).strftime('%d.%m.%Y %H:%M')}")
 
     # Add custom footer
     if footer:

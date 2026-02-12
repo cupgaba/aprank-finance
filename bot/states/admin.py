@@ -68,3 +68,6 @@ class AdminStates(StatesGroup):
     settings_reminder_time = State()
     settings_low_stock_custom = State()
     settings_reservation_custom = State()
+
+    # Ban states
+    ban_user_id = State()

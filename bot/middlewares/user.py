@@ -34,4 +34,12 @@ class UserMiddleware(BaseMiddleware):
             )
             data["user"] = db_user
 
+            # Block banned users (except admins)
+            if not db_user.is_active and not db_user.is_admin:
+                if isinstance(event, Message):
+                    await event.answer("🚫 Вы заблокированы.")
+                elif isinstance(event, CallbackQuery):
+                    await event.answer("🚫 Вы заблокированы.", show_alert=True)
+                return
+
         return await handler(event, data)

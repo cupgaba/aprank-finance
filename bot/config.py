@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     PRICELIST_MINUTE: int = 0
 
     # Timezone
-    TIMEZONE: str = "Europe/Moscow"
+    TIMEZONE: str = "Asia/Yekaterinburg"
 
     @field_validator("ADMIN_IDS", mode="before")
     @classmethod

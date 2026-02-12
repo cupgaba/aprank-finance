@@ -1,26 +1,33 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from datetime import datetime, timedelta
+import pytz
 
+from ...config import settings
 from ...database import Database
 from ...keyboards.admin import AdminKeyboards
 from ...utils.formatting import format_price, format_writeoff_reason
 
 statistics_router = Router()
+_tz = pytz.timezone(settings.TIMEZONE)
 
 
 def _get_period_dates(period: str) -> tuple:
-    """Get start and end dates for a period"""
-    now = datetime.utcnow()
-    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    """Get start and end dates for a period (in UTC, based on local timezone)"""
+    now_local = datetime.now(_tz)
+    today_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    # Convert local midnight to UTC for DB queries
+    today = today_local.astimezone(pytz.utc).replace(tzinfo=None)
+
+    weekday = today_local.weekday()
 
     if period == "today":
         return today, None, "сегодня"
     elif period == "this_week":
-        start = today - timedelta(days=today.weekday())
+        start = today - timedelta(days=weekday)
         return start, None, "эту неделю"
     elif period == "last_week":
-        this_monday = today - timedelta(days=today.weekday())
+        this_monday = today - timedelta(days=weekday)
         last_monday = this_monday - timedelta(days=7)
         last_sunday = this_monday - timedelta(seconds=1)
         return last_monday, last_sunday, "прошлую неделю"
@@ -80,6 +87,10 @@ def _format_full_statistics(stats: dict, period_name: str) -> str:
         lines.append(f"📋 Закупок: {stats['supplies_count']}")
         lines.append(f"📦 Закуплено товаров: {stats['total_supply_items']} шт.")
         lines.append(f"💵 Сумма закупок: {format_price(stats['total_supply_amount'])}")
+        if stats.get('total_delivery_cost', 0) > 0:
+            lines.append(f"🚚 Доставка: {format_price(stats['total_delivery_cost'])}")
+        if stats.get('total_extra_expenses', 0) > 0:
+            lines.append(f"📋 Расходы: {format_price(stats['total_extra_expenses'])}")
     else:
         lines.append("Закупок нет")
 
@@ -107,9 +118,14 @@ def _format_full_statistics(stats: dict, period_name: str) -> str:
     if stats["sales_count"] > 0 or stats["writeoffs_count"] > 0:
         lines.append("")
         lines.append("━━━ 📋 <b>ИТОГО</b> ━━━")
-        net_result = stats["total_profit"] - stats["total_writeoff_loss"]
+        delivery = stats.get("total_delivery_cost", 0)
+        expenses = stats.get("total_extra_expenses", 0)
+        overhead = delivery + expenses
+        net_result = stats["total_profit"] - stats["total_writeoff_loss"] - overhead
         lines.append(f"📈 Прибыль от продаж: {format_price(stats['total_profit'])}")
         lines.append(f"📤 Убыток от списаний: {format_price(stats['total_writeoff_loss'])}")
+        if overhead > 0:
+            lines.append(f"🚚 Доставка + расходы: {format_price(overhead)}")
         emoji = "📈" if net_result >= 0 else "📉"
         lines.append(f"{emoji} Чистый результат: {format_price(net_result)}")
 
