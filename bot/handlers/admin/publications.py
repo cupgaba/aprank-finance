@@ -1,6 +1,7 @@
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
+from aiogram.exceptions import TelegramBadRequest
 
 from ...database import Database
 from ...keyboards.admin import AdminKeyboards
@@ -27,11 +28,14 @@ async def publish_pricelist(callback: CallbackQuery, db: Database, bot: Bot, is_
 
     if success:
         await callback.answer("✅ Прайс-лист опубликован!")
-        await callback.message.edit_text(
-            "✅ Прайс-лист успешно опубликован в канал!",
-            reply_markup=AdminKeyboards.publications_menu(),
-            parse_mode="HTML"
-        )
+        try:
+            await callback.message.edit_text(
+                "✅ Прайс-лист успешно опубликован в канал!",
+                reply_markup=AdminKeyboards.publications_menu(),
+                parse_mode="HTML"
+            )
+        except TelegramBadRequest:
+            pass
     else:
         await callback.answer("❌ Ошибка публикации. Проверьте настройки канала.", show_alert=True)
 

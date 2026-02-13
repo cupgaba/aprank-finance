@@ -59,20 +59,20 @@ class ChannelService:
             print(f"Failed to mark product sold: {e}")
             return False
 
-    async def _delete_old_pricelist(self, settings: BotSettings):
+    async def _delete_old_pricelist(self, s: BotSettings):
         """Delete previous pricelist messages from channel"""
-        if not settings.pricelist_last_message_ids:
+        if not s.pricelist_last_message_ids:
             return
 
         try:
-            msg_ids = json.loads(settings.pricelist_last_message_ids)
+            msg_ids = json.loads(s.pricelist_last_message_ids)
             for msg_id in msg_ids:
                 try:
                     await self.bot.delete_message(chat_id=self.channel_id, message_id=msg_id)
-                except Exception:
-                    pass
-        except (json.JSONDecodeError, TypeError):
-            pass
+                except Exception as e:
+                    print(f"Failed to delete pricelist msg {msg_id}: {e}")
+        except (json.JSONDecodeError, TypeError) as e:
+            print(f"Failed to parse pricelist_last_message_ids '{s.pricelist_last_message_ids}': {e}")
 
     async def publish_pricelist(self, settings: Optional[BotSettings] = None) -> bool:
         """Publish full price list to channel with template settings"""

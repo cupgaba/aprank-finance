@@ -75,6 +75,27 @@ class Database:
                     f"ALTER TABLE bot_settings ADD COLUMN {col_name} {col_type}"
                 ))
 
+        # Fix NULL values for columns that should have defaults (SQLite ALTER TABLE
+        # adds columns as NULL for existing rows even with DEFAULT clause)
+        null_fixes = {
+            "pricelist_show_quantities": "1",
+            "pricelist_show_brands": "1",
+            "pricelist_auto_enabled": "0",
+            "pricelist_auto_frequency": "1",
+            "pricelist_time1_hour": "10",
+            "pricelist_time1_minute": "0",
+            "pricelist_time2_hour": "18",
+            "pricelist_time2_minute": "0",
+            "pricelist_time3_hour": "14",
+            "pricelist_time3_minute": "0",
+            "max_reservations_per_user": "3",
+        }
+        for col_name, default_val in null_fixes.items():
+            if col_name in existing:
+                connection.execute(text(
+                    f"UPDATE bot_settings SET {col_name} = {default_val} WHERE {col_name} IS NULL"
+                ))
+
     @staticmethod
     def _migrate_supplies(connection):
         """Add missing columns to supplies table"""

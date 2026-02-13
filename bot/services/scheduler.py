@@ -106,15 +106,20 @@ class SchedulerService:
             current_hour = now.hour
             current_minute = now.minute
 
-            # Check each configured time slot
-            time_slots = [(bot_settings.pricelist_time1_hour, bot_settings.pricelist_time1_minute)]
-            if bot_settings.pricelist_auto_frequency >= 2:
-                time_slots.append((bot_settings.pricelist_time2_hour, bot_settings.pricelist_time2_minute))
-            if bot_settings.pricelist_auto_frequency >= 3:
-                time_slots.append((bot_settings.pricelist_time3_hour, bot_settings.pricelist_time3_minute))
+            freq = bot_settings.pricelist_auto_frequency or 1
+
+            # Check each configured time slot (handle None from migration)
+            time_slots = []
+            if bot_settings.pricelist_time1_hour is not None:
+                time_slots.append((bot_settings.pricelist_time1_hour, bot_settings.pricelist_time1_minute or 0))
+            if freq >= 2 and bot_settings.pricelist_time2_hour is not None:
+                time_slots.append((bot_settings.pricelist_time2_hour, bot_settings.pricelist_time2_minute or 0))
+            if freq >= 3 and bot_settings.pricelist_time3_hour is not None:
+                time_slots.append((bot_settings.pricelist_time3_hour, bot_settings.pricelist_time3_minute or 0))
 
             for hour, minute in time_slots:
                 if current_hour == hour and current_minute == minute:
+                    print(f"Auto-publishing pricelist at {hour:02d}:{minute:02d}")
                     await self.channel_service.publish_pricelist(settings=bot_settings)
                     break
 
