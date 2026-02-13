@@ -117,9 +117,11 @@ class SchedulerService:
             if freq >= 3 and bot_settings.pricelist_time3_hour is not None:
                 time_slots.append((bot_settings.pricelist_time3_hour, bot_settings.pricelist_time3_minute or 0))
 
+            print(f"[AutoPublish] now={current_hour:02d}:{current_minute:02d} freq={freq} slots={time_slots} enabled={bot_settings.pricelist_auto_enabled}")
+
             for hour, minute in time_slots:
                 if current_hour == hour and current_minute == minute:
-                    print(f"Auto-publishing pricelist at {hour:02d}:{minute:02d}")
+                    print(f"[AutoPublish] MATCH! Publishing at {hour:02d}:{minute:02d}")
                     await self.channel_service.publish_pricelist(settings=bot_settings)
                     break
 
