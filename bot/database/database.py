@@ -67,6 +67,9 @@ class Database:
             "pricelist_time3_minute": "INTEGER DEFAULT 0",
             "pricelist_last_message_ids": "TEXT",
             "max_reservations_per_user": "INTEGER DEFAULT 3",
+            "contacts_text": "TEXT",
+            "contacts_contact": "TEXT",
+            "contacts_work_hours": "VARCHAR(100)",
         }
 
         for col_name, col_type in migrations.items():

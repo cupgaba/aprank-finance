@@ -257,6 +257,184 @@ async def set_max_reservations(callback: CallbackQuery, db: Database, is_admin: 
     )
 
 
+# ==================== CONTACTS SETTINGS ====================
+
+
+@settings_router.callback_query(F.data == "admin:settings:contacts")
+async def contacts_settings(callback: CallbackQuery, db: Database, is_admin: bool = False):
+    """Show contacts settings"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    s = await db.get_settings()
+    text = "📞 <b>Настройка контактов</b>\n\n"
+    text += f"Текст: {s.contacts_text or '<i>не задан</i>'}\n"
+    text += f"Контакт: {s.contacts_contact or '<i>не задан</i>'}\n"
+    text += f"Время работы: {s.contacts_work_hours or '<i>не задано</i>'}\n"
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=AdminKeyboards.contacts_settings(s),
+        parse_mode="HTML"
+    )
+
+
+@settings_router.callback_query(F.data == "admin:settings:contacts:text")
+async def contacts_set_text_start(callback: CallbackQuery, db: Database, state: FSMContext, is_admin: bool = False):
+    """Start setting contacts text"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    s = await db.get_settings()
+    current = s.contacts_text or "не задан"
+
+    await state.set_state(AdminStates.contacts_set_text)
+    await callback.message.edit_text(
+        "📝 <b>Текст контактов</b>\n\n"
+        f"Текущий: <code>{current}</code>\n\n"
+        "Введите текст, который будет отображаться на странице контактов.\n"
+        "Отправьте <code>-</code> чтобы сбросить на стандартный.",
+        parse_mode="HTML"
+    )
+
+
+@settings_router.message(AdminStates.contacts_set_text)
+async def contacts_set_text(message: Message, db: Database, state: FSMContext, is_admin: bool = False):
+    """Process contacts text"""
+    if not is_admin:
+        return
+
+    text = message.text.strip()
+    if text == "-":
+        text = None
+
+    await db.update_settings(contacts_text=text or "")
+    await state.clear()
+
+    s = await db.get_settings()
+    await message.answer(
+        "✅ Текст контактов обновлён!",
+        reply_markup=AdminKeyboards.contacts_settings(s),
+        parse_mode="HTML"
+    )
+
+
+@settings_router.callback_query(F.data == "admin:settings:contacts:contact")
+async def contacts_set_contact_start(callback: CallbackQuery, db: Database, state: FSMContext, is_admin: bool = False):
+    """Start setting contact info"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    s = await db.get_settings()
+    current = s.contacts_contact or "не задан"
+
+    await state.set_state(AdminStates.contacts_set_contact)
+    await callback.message.edit_text(
+        "👤 <b>Контакт для связи</b>\n\n"
+        f"Текущий: <code>{current}</code>\n\n"
+        "Введите контакт (например @username, номер телефона или ссылку).\n"
+        "Отправьте <code>-</code> чтобы убрать.",
+        parse_mode="HTML"
+    )
+
+
+@settings_router.message(AdminStates.contacts_set_contact)
+async def contacts_set_contact(message: Message, db: Database, state: FSMContext, is_admin: bool = False):
+    """Process contact info"""
+    if not is_admin:
+        return
+
+    text = message.text.strip()
+    if text == "-":
+        text = None
+
+    await db.update_settings(contacts_contact=text or "")
+    await state.clear()
+
+    s = await db.get_settings()
+    await message.answer(
+        "✅ Контакт обновлён!",
+        reply_markup=AdminKeyboards.contacts_settings(s),
+        parse_mode="HTML"
+    )
+
+
+@settings_router.callback_query(F.data == "admin:settings:contacts:hours")
+async def contacts_set_hours_start(callback: CallbackQuery, db: Database, state: FSMContext, is_admin: bool = False):
+    """Start setting work hours"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    s = await db.get_settings()
+    current = s.contacts_work_hours or "не задано"
+
+    await state.set_state(AdminStates.contacts_set_hours)
+    await callback.message.edit_text(
+        "🕐 <b>Время работы</b>\n\n"
+        f"Текущее: <code>{current}</code>\n\n"
+        "Введите время работы (например: <code>10:00 - 22:00</code>).\n"
+        "Отправьте <code>-</code> чтобы убрать.",
+        parse_mode="HTML"
+    )
+
+
+@settings_router.message(AdminStates.contacts_set_hours)
+async def contacts_set_hours(message: Message, db: Database, state: FSMContext, is_admin: bool = False):
+    """Process work hours"""
+    if not is_admin:
+        return
+
+    text = message.text.strip()
+    if text == "-":
+        text = None
+
+    await db.update_settings(contacts_work_hours=text or "")
+    await state.clear()
+
+    s = await db.get_settings()
+    await message.answer(
+        "✅ Время работы обновлено!",
+        reply_markup=AdminKeyboards.contacts_settings(s),
+        parse_mode="HTML"
+    )
+
+
+@settings_router.callback_query(F.data == "admin:settings:contacts:preview")
+async def contacts_preview(callback: CallbackQuery, db: Database, is_admin: bool = False):
+    """Preview contacts page"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    s = await db.get_settings()
+    text = _build_contacts_text(s)
+
+    await callback.answer()
+    await callback.message.edit_text(
+        f"👁 <b>Предпросмотр:</b>\n\n{'─' * 20}\n{text}\n{'─' * 20}",
+        reply_markup=AdminKeyboards.contacts_settings(s),
+        parse_mode="HTML"
+    )
+
+
+def _build_contacts_text(s) -> str:
+    """Build contacts page text from settings"""
+    parts = ["📞 <b>Контакты</b>\n"]
+    if s.contacts_text:
+        parts.append(s.contacts_text)
+    else:
+        parts.append("Для связи с продавцом напишите администратору.")
+    if s.contacts_contact:
+        parts.append(f"\n👤 {s.contacts_contact}")
+    if s.contacts_work_hours:
+        parts.append(f"\n🕐 Время работы: {s.contacts_work_hours}")
+    return "\n".join(parts)
+
+
 # ==================== BAN MANAGEMENT ====================
 
 

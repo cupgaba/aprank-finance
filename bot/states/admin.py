@@ -69,5 +69,10 @@ class AdminStates(StatesGroup):
     settings_low_stock_custom = State()
     settings_reservation_custom = State()
 
+    # Contacts settings states
+    contacts_set_text = State()
+    contacts_set_contact = State()
+    contacts_set_hours = State()
+
     # Ban states
     ban_user_id = State()

@@ -264,6 +264,11 @@ class BotSettings(Base):
     # Max reservations per user
     max_reservations_per_user: Mapped[int] = mapped_column(Integer, default=3)
 
+    # Contacts page settings
+    contacts_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=None)
+    contacts_contact: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=None)
+    contacts_work_hours: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, default=None)
+
 
 class SupplyDraft(Base):
     __tablename__ = "supply_drafts"

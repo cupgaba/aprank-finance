@@ -487,6 +487,7 @@ class AdminKeyboards:
         builder.row(InlineKeyboardButton(text="📦 Порог низкого остатка", callback_data="admin:settings:low_stock"))
         builder.row(InlineKeyboardButton(text="🔔 Время резерва", callback_data="admin:settings:reservation"))
         builder.row(InlineKeyboardButton(text="📌 Макс. резервов", callback_data="admin:settings:max_reservations"))
+        builder.row(InlineKeyboardButton(text="📞 Контакты", callback_data="admin:settings:contacts"))
         builder.row(InlineKeyboardButton(text="🚫 Управление банами", callback_data="admin:settings:bans"))
         return builder.as_markup()
 
@@ -580,6 +581,29 @@ class AdminKeyboards:
                 callback_data=f"admin:settings:set_max_res:{v}"
             ))
         builder.row(*row)
+        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:settings_menu"))
+        return builder.as_markup()
+
+    @staticmethod
+    def contacts_settings(s: BotSettings) -> InlineKeyboardMarkup:
+        """Contacts settings menu"""
+        builder = InlineKeyboardBuilder()
+        text_status = "✅" if s.contacts_text else "❌"
+        contact_status = "✅" if s.contacts_contact else "❌"
+        hours_status = "✅" if s.contacts_work_hours else "❌"
+        builder.row(InlineKeyboardButton(
+            text=f"{text_status} Текст",
+            callback_data="admin:settings:contacts:text"
+        ))
+        builder.row(InlineKeyboardButton(
+            text=f"{contact_status} Контакт",
+            callback_data="admin:settings:contacts:contact"
+        ))
+        builder.row(InlineKeyboardButton(
+            text=f"{hours_status} Время работы",
+            callback_data="admin:settings:contacts:hours"
+        ))
+        builder.row(InlineKeyboardButton(text="👁 Предпросмотр", callback_data="admin:settings:contacts:preview"))
         builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:settings_menu"))
         return builder.as_markup()
 

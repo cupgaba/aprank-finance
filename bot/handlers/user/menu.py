@@ -63,11 +63,16 @@ async def my_reservations(message: Message, db: Database, user: User, state: FSM
 
 
 @menu_router.message(F.text == "📞 Контакты")
-async def contacts(message: Message):
+async def contacts(message: Message, db: Database):
     """Show contacts"""
-    await message.answer(
-        "📞 <b>Контакты</b>\n\n"
-        "Для связи с продавцом напишите администратору.\n\n"
-        "Время работы: 10:00 - 22:00",
-        parse_mode="HTML"
-    )
+    s = await db.get_settings()
+    parts = ["📞 <b>Контакты</b>\n"]
+    if s.contacts_text:
+        parts.append(s.contacts_text)
+    else:
+        parts.append("Для связи с продавцом напишите администратору.")
+    if s.contacts_contact:
+        parts.append(f"\n👤 {s.contacts_contact}")
+    if s.contacts_work_hours:
+        parts.append(f"\n🕐 Время работы: {s.contacts_work_hours}")
+    await message.answer("\n".join(parts), parse_mode="HTML")
