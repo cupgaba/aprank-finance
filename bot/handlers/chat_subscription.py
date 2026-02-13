@@ -1,6 +1,6 @@
 import logging
 
-from aiogram import Router, F, Bot
+from aiogram import Bot, F, Router
 from aiogram.enums import ChatMemberStatus
 from aiogram.types import (
     CallbackQuery,
@@ -19,11 +19,57 @@ logger = logging.getLogger(__name__)
 chat_subscription_router = Router()
 
 
-def _verify_keyboard(chat_id: int, user_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
-        text="✅ Подписался",
-        callback_data=f"market_sub:check:{chat_id}:{user_id}"
-    )]])
+async def _resolve_channel_url(bot: Bot, channel_id: int) -> str | None:
+    """Build best-effort public URL for channel subscription button."""
+    try:
+        chat = await bot.get_chat(channel_id)
+    except Exception as e:
+        logger.warning("[sub_guard] Failed to load chat for channel_id=%s err=%s", channel_id, e)
+        return None
+
+    if getattr(chat, "username", None):
+        return f"https://t.me/{chat.username}"
+
+    invite_link = getattr(chat, "invite_link", None)
+    if invite_link:
+        return invite_link
+
+    try:
+        created = await bot.create_chat_invite_link(chat_id=channel_id, creates_join_request=False)
+        if created and getattr(created, "invite_link", None):
+            return created.invite_link
+    except Exception as e:
+        logger.warning(
+            "[sub_guard] Failed to create invite link for channel_id=%s err=%s",
+            channel_id,
+            e,
+        )
+
+    return None
+
+
+async def _verify_keyboard(bot: Bot, chat_id: int, user_id: int, channels: list[int]) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+
+    for index, channel_id in enumerate(channels, start=1):
+        url = await _resolve_channel_url(bot, channel_id)
+        if not url:
+            continue
+        rows.append([
+            InlineKeyboardButton(
+                text=f"📢 Подписаться {index}",
+                url=url,
+            )
+        ])
+
+    rows.append([
+        InlineKeyboardButton(
+            text="✅ Подписался",
+            callback_data=f"market_sub:check:{chat_id}:{user_id}",
+        )
+    ])
+
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 async def _apply_join_restriction(bot: Bot, chat_id: int, user_id: int):
@@ -99,7 +145,7 @@ async def _apply_join_restriction(bot: Bot, chat_id: int, user_id: int):
         await bot.send_message(
             chat_id=chat_id,
             text="Для того чтобы писать в беседе, вам нужно подписаться на канал.",
-            reply_markup=_verify_keyboard(chat_id, user_id),
+            reply_markup=await _verify_keyboard(bot, chat_id, user_id, config.channels),
         )
         logger.info("[sub_guard] Prompt sent chat_id=%s user_id=%s", chat_id, user_id)
     except Exception as e:
@@ -162,7 +208,6 @@ async def on_new_chat_members_message(message: Message, bot: Bot):
     )
 
     for member in message.new_chat_members:
-        # Ignore bot joins
         if member.is_bot:
             logger.info("[sub_guard] Skipping bot join chat_id=%s user_id=%s", message.chat.id, member.id)
             continue
