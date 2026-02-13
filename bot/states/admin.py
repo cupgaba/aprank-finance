@@ -74,5 +74,9 @@ class AdminStates(StatesGroup):
     contacts_set_contact = State()
     contacts_set_hours = State()
 
+    # Marketplace subscription guard states
+    market_sub_chat_id = State()
+    market_sub_channels = State()
+
     # Ban states
     ban_user_id = State()

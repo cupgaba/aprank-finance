@@ -70,6 +70,7 @@ class Database:
             "contacts_text": "TEXT",
             "contacts_contact": "TEXT",
             "contacts_work_hours": "VARCHAR(100)",
+            "market_chat_subscriptions": "TEXT",
         }
 
         for col_name, col_type in migrations.items():
