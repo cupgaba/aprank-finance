@@ -39,7 +39,7 @@ async def publish_pricelist(callback: CallbackQuery, db: Database, bot: Bot, is_
         except TelegramBadRequest:
             pass
     else:
-        logger.error("Manual pricelist publication failed. reason=%s channel_id=%s", channel_service.last_error, channel_service.channel_id)
+        logger.error("Manual pricelist publication failed. reason=%s channel_id=%s", getattr(channel_service, "last_error", "n/a"), channel_service.channel_id)
         await callback.answer("❌ Ошибка публикации. Проверьте настройки канала.", show_alert=True)
 
 

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 
 from aiogram import Bot, F, Router
 from aiogram.enums import ChatMemberStatus
@@ -18,6 +19,19 @@ from ..services import SubscriptionGuardService
 logger = logging.getLogger(__name__)
 
 chat_subscription_router = Router()
+
+_PROMPT_COOLDOWN_SECONDS = 10
+_last_prompt_sent: dict[tuple[int, int], float] = {}
+
+
+def _is_prompt_throttled(chat_id: int, user_id: int) -> bool:
+    now = time.monotonic()
+    key = (chat_id, user_id)
+    last = _last_prompt_sent.get(key)
+    if last is not None and (now - last) < _PROMPT_COOLDOWN_SECONDS:
+        return True
+    _last_prompt_sent[key] = now
+    return False
 
 
 async def _resolve_channel_url(bot: Bot, channel_id: int) -> str | None:
@@ -93,23 +107,9 @@ async def _apply_join_restriction(bot: Bot, chat_id: int, user_id: int):
         config.channels,
     )
 
-    # Avoid duplicate prompts when both chat_member and service message arrive
-    try:
-        current_member = await bot.get_chat_member(chat_id=chat_id, user_id=user_id)
-        if current_member.status == ChatMemberStatus.RESTRICTED and getattr(current_member, "can_send_messages", True) is False:
-            logger.info(
-                "[sub_guard] User already restricted chat_id=%s user_id=%s. Skip duplicate prompt.",
-                chat_id,
-                user_id,
-            )
-            return
-    except Exception as e:
-        logger.warning(
-            "[sub_guard] Failed to pre-check member state chat_id=%s user_id=%s err=%s",
-            chat_id,
-            user_id,
-            e,
-        )
+    if _is_prompt_throttled(chat_id, user_id):
+        logger.info("[sub_guard] Prompt throttled chat_id=%s user_id=%s", chat_id, user_id)
+        return
 
     try:
         await bot.restrict_chat_member(
@@ -189,6 +189,9 @@ async def on_user_joined_market_chat(event: ChatMemberUpdated, bot: Bot):
     is_join_event = (
         old_status in {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED}
         and new_status in {ChatMemberStatus.MEMBER, ChatMemberStatus.RESTRICTED}
+    ) or (
+        old_status == ChatMemberStatus.RESTRICTED
+        and new_status == ChatMemberStatus.RESTRICTED
     )
     if not is_join_event:
         logger.info(
@@ -276,6 +279,10 @@ async def verify_market_subscription(callback: CallbackQuery, bot: Bot):
             )
             await callback.answer("Вы ещё не подписались на все каналы", show_alert=True)
             return
+
+    if _is_prompt_throttled(chat_id, user_id):
+        logger.info("[sub_guard] Prompt throttled chat_id=%s user_id=%s", chat_id, user_id)
+        return
 
     try:
         await bot.restrict_chat_member(
