@@ -1,11 +1,14 @@
 from typing import Optional
 import json
+import logging
 from aiogram import Bot
 
 from ..config import settings
 from ..database import Database
 from ..database.models import BotSettings
 from ..utils.formatting import format_channel_post, format_pricelist
+
+logger = logging.getLogger(__name__)
 
 
 class ChannelService:
@@ -15,6 +18,7 @@ class ChannelService:
         self.bot = bot
         self.db = db
         self.channel_id = settings.CHANNEL_ID
+        self.last_error: Optional[str] = None
 
     async def mark_product_sold(self, product_id: int) -> bool:
         """Mark product as sold in channel"""
@@ -56,7 +60,7 @@ class ChannelService:
             return True
 
         except Exception as e:
-            print(f"Failed to mark product sold: {e}")
+            logger.exception("Failed to mark product sold product_id=%s err=%s", product_id, e)
             return False
 
     async def _delete_old_pricelist(self, s: BotSettings):
@@ -70,27 +74,29 @@ class ChannelService:
                 try:
                     await self.bot.delete_message(chat_id=self.channel_id, message_id=msg_id)
                 except Exception as e:
-                    print(f"Failed to delete pricelist msg {msg_id}: {e}")
+                    logger.warning("Failed to delete pricelist msg id=%s chat_id=%s err=%s", msg_id, self.channel_id, e)
         except (json.JSONDecodeError, TypeError) as e:
-            print(f"Failed to parse pricelist_last_message_ids '{s.pricelist_last_message_ids}': {e}")
+            logger.warning("Failed to parse pricelist_last_message_ids value=%r err=%s", s.pricelist_last_message_ids, e)
 
     async def publish_pricelist(self, settings: Optional[BotSettings] = None) -> bool:
         """Publish full price list to channel with template settings"""
+        self.last_error = None
+
         if not self.channel_id:
+            self.last_error = "CHANNEL_ID is not configured"
+            logger.error("Pricelist publish aborted: %s", self.last_error)
             return False
 
         try:
-            # Get all products in stock
             products = await self.db.get_all_products(in_stock_only=True)
-
             if not products:
+                self.last_error = "No products in stock for pricelist publication"
+                logger.warning("Pricelist publish skipped: %s", self.last_error)
                 return False
 
-            # Get template settings
             if settings is None:
                 settings = await self.db.get_settings()
 
-            # Delete old pricelist messages
             await self._delete_old_pricelist(settings)
 
             text = format_pricelist(
@@ -104,9 +110,7 @@ class ChannelService:
             photo_file_id = settings.pricelist_photo_file_id
             sent_message_ids = []
 
-            # If there's a photo, send photo + text
             if photo_file_id:
-                # Caption limit is 1024 chars, so if text is longer split it
                 if len(text) <= 1024:
                     msg = await self.bot.send_photo(
                         chat_id=self.channel_id,
@@ -116,7 +120,6 @@ class ChannelService:
                     )
                     sent_message_ids.append(msg.message_id)
                 else:
-                    # Split text: first part as photo caption, rest as follow-up
                     caption, remaining = self._split_text_for_caption(text, 1024)
                     msg = await self.bot.send_photo(
                         chat_id=self.channel_id,
@@ -132,28 +135,28 @@ class ChannelService:
                 ids = await self._send_long_text(text)
                 sent_message_ids.extend(ids)
 
-            # Save message IDs for future deletion
             await self.db.update_settings(
                 pricelist_last_message_ids=json.dumps(sent_message_ids)
             )
 
+            logger.info("Pricelist published successfully chat_id=%s messages=%s", self.channel_id, sent_message_ids)
             return True
 
         except Exception as e:
-            print(f"Failed to publish pricelist: {e}")
+            self.last_error = str(e)
+            logger.exception(
+                "Failed to publish pricelist chat_id=%s err=%s",
+                self.channel_id,
+                e,
+            )
             return False
 
     @staticmethod
     def _find_category_break(text: str, max_pos: int) -> int:
-        """Find last category block start within max_pos.
-        Category blocks start with: \\n━━━━━\\n📁
-        Returns position to cut at (before the block), or -1 if not found."""
         search_area = text[:max_pos]
-        # Find the opening separator followed by category icon
         marker = "\n━━━━━\n📁"
         pos = search_area.rfind(marker)
         if pos > 0:
-            # Go back to include the empty line before separator
             if pos >= 2 and text[pos-1:pos+1] == "\n\n":
                 return pos - 1
             return pos
@@ -161,15 +164,12 @@ class ChannelService:
 
     @staticmethod
     def _split_text_for_caption(text: str, max_caption: int = 1024) -> tuple[str, str]:
-        """Split text into caption + remaining, breaking at category boundary"""
         if len(text) <= max_caption:
             return text, ""
 
-        # Try to split at category boundary first
         cut_pos = ChannelService._find_category_break(text, max_caption)
 
         if cut_pos <= 0:
-            # No category break found, fall back to last newline
             cut_pos = text.rfind("\n", 0, max_caption)
         if cut_pos <= 0:
             cut_pos = max_caption
@@ -179,7 +179,6 @@ class ChannelService:
         return caption, remaining
 
     async def _send_long_text(self, text: str) -> list[int]:
-        """Send text to channel, splitting at category boundaries if too long. Returns message IDs."""
         sent_ids = []
         max_length = 4096
         if len(text) <= max_length:
@@ -202,7 +201,6 @@ class ChannelService:
 
     @staticmethod
     def _split_at_categories(text: str, max_length: int = 4096) -> list[str]:
-        """Split text into parts, preferring category boundaries"""
         if len(text) <= max_length:
             return [text]
 
@@ -214,11 +212,9 @@ class ChannelService:
                 parts.append(remaining)
                 break
 
-            # Try category boundary first
             cut_pos = ChannelService._find_category_break(remaining, max_length)
 
             if cut_pos <= 0:
-                # Fall back to last newline
                 cut_pos = remaining.rfind("\n", 0, max_length)
             if cut_pos <= 0:
                 cut_pos = max_length

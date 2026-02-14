@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from aiogram import Bot, F, Router
@@ -142,12 +143,13 @@ async def _apply_join_restriction(bot: Bot, chat_id: int, user_id: int):
         return
 
     try:
-        await bot.send_message(
+        prompt_message = await bot.send_message(
             chat_id=chat_id,
             text="Для того чтобы писать в беседе, вам нужно подписаться на канал.",
             reply_markup=await _verify_keyboard(bot, chat_id, user_id, config.channels),
         )
         logger.info("[sub_guard] Prompt sent chat_id=%s user_id=%s", chat_id, user_id)
+        asyncio.create_task(_delete_prompt_later(bot, chat_id, prompt_message.message_id, delay_seconds=60))
     except Exception as e:
         logger.exception(
             "[sub_guard] Failed to send prompt chat_id=%s user_id=%s err=%s",
@@ -155,6 +157,16 @@ async def _apply_join_restriction(bot: Bot, chat_id: int, user_id: int):
             user_id,
             e,
         )
+
+
+async def _delete_prompt_later(bot: Bot, chat_id: int, message_id: int, delay_seconds: int = 60):
+    await asyncio.sleep(delay_seconds)
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=message_id)
+        logger.info("[sub_guard] Prompt auto-deleted chat_id=%s message_id=%s", chat_id, message_id)
+    except Exception as e:
+        logger.debug("[sub_guard] Prompt was not deleted chat_id=%s message_id=%s err=%s", chat_id, message_id, e)
+
 
 
 @chat_subscription_router.chat_member()
