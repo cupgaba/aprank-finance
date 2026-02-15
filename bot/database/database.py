@@ -716,6 +716,49 @@ class Database:
             await session.refresh(sale)
             return sale
 
+
+    async def get_sale_by_id(self, sale_id: int) -> Optional[Sale]:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(Sale).where(Sale.id == sale_id)
+            )
+            return result.scalar_one_or_none()
+
+    async def update_sale_price(self, sale_id: int, sale_price: float) -> Optional[Sale]:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(Sale).where(Sale.id == sale_id)
+            )
+            sale = result.scalar_one_or_none()
+            if not sale:
+                return None
+
+            sale.sale_price = sale_price
+            await session.commit()
+            await session.refresh(sale)
+            return sale
+
+    async def delete_sale(self, sale_id: int, restore_stock: bool = True) -> bool:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(Sale).where(Sale.id == sale_id)
+            )
+            sale = result.scalar_one_or_none()
+            if not sale:
+                return False
+
+            if restore_stock:
+                result = await session.execute(
+                    select(Product).where(Product.id == sale.product_id)
+                )
+                product = result.scalar_one_or_none()
+                if product:
+                    product.quantity += sale.quantity
+
+            await session.delete(sale)
+            await session.commit()
+            return True
+
     async def get_sales_by_period(
         self,
         start_date: datetime,

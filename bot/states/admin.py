@@ -42,6 +42,7 @@ class AdminStates(StatesGroup):
     sale_enter_quantity = State()
     sale_enter_price = State()
     sale_search = State()
+    sale_edit_price = State()
 
     # Search states
     search_product = State()

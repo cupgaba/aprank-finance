@@ -161,6 +161,37 @@ async def brand_products(callback: CallbackQuery, db: Database, is_admin: bool):
     )
 
 
+@brands_router.callback_query(F.data.startswith("admin:brand_products_page:"))
+async def brand_products_page(callback: CallbackQuery, db: Database, is_admin: bool):
+    """Pagination for brand products list"""
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    parts = callback.data.split(":")
+    brand_id = int(parts[-2])
+    page = int(parts[-1])
+
+    brand = await db.get_brand_by_id(brand_id)
+    if not brand:
+        await callback.answer("❌ Бренд не найден", show_alert=True)
+        return
+
+    products = await db.get_products_by_brand(brand_id)
+
+    await callback.message.edit_text(
+        f"🏷 <b>{brand.name}</b> → Товары\n\n"
+        f"{'Выберите товар:' if products else 'Товары не добавлены.'}",
+        reply_markup=AdminKeyboards.products_list(
+            products,
+            brand_id,
+            back_callback=f"admin:brand:view:{brand_id}",
+            page=page,
+        ),
+        parse_mode="HTML"
+    )
+
+
 @brands_router.callback_query(F.data.startswith("admin:brand:edit:"))
 async def edit_brand_start(callback: CallbackQuery, db: Database, is_admin: bool, state: FSMContext):
     """Start editing brand"""

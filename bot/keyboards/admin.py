@@ -133,10 +133,12 @@ class AdminKeyboards:
         if total > per_page:
             nav_buttons = []
             if page > 0:
-                nav_buttons.append(InlineKeyboardButton(text="◀️", callback_data=f"admin:products_page:{page-1}"))
+                nav_cb = f"admin:brand_products_page:{brand_id}:{page-1}" if brand_id else f"admin:products_page:{page-1}"
+                nav_buttons.append(InlineKeyboardButton(text="◀️", callback_data=nav_cb))
             nav_buttons.append(InlineKeyboardButton(text=f"{page+1}/{(total-1)//per_page+1}", callback_data="noop"))
             if end < total:
-                nav_buttons.append(InlineKeyboardButton(text="▶️", callback_data=f"admin:products_page:{page+1}"))
+                nav_cb = f"admin:brand_products_page:{brand_id}:{page+1}" if brand_id else f"admin:products_page:{page+1}"
+                nav_buttons.append(InlineKeyboardButton(text="▶️", callback_data=nav_cb))
             builder.row(*nav_buttons)
 
         if brand_id:
@@ -323,6 +325,45 @@ class AdminKeyboards:
         return builder.as_markup()
 
     # ==================== WRITE-OFFS ====================
+    @staticmethod
+    def sales_history_list(sales: Sequence, page: int = 0, per_page: int = 10) -> InlineKeyboardMarkup:
+        """Sales history list with pagination"""
+        builder = InlineKeyboardBuilder()
+
+        total = len(sales)
+        start = page * per_page
+        end = start + per_page
+        page_sales = sales[start:end]
+
+        for sale in page_sales:
+            date_str = sale.sold_at.strftime("%d.%m %H:%M")
+            builder.row(InlineKeyboardButton(
+                text=f"💸 {date_str} • {sale.product.name} x{sale.quantity} • {sale.sale_price:.0f}₽",
+                callback_data=f"admin:sale:view:{sale.id}"
+            ))
+
+        if total > per_page:
+            nav_buttons = []
+            if page > 0:
+                nav_buttons.append(InlineKeyboardButton(text="◀️", callback_data=f"admin:sale:history:page:{page-1}"))
+            nav_buttons.append(InlineKeyboardButton(text=f"{page+1}/{(total-1)//per_page+1}", callback_data="noop"))
+            if end < total:
+                nav_buttons.append(InlineKeyboardButton(text="▶️", callback_data=f"admin:sale:history:page:{page+1}"))
+            builder.row(*nav_buttons)
+
+        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:sales_menu"))
+        return builder.as_markup()
+
+    @staticmethod
+    def sale_manage(sale_id: int) -> InlineKeyboardMarkup:
+        """Manage completed sale"""
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="✏️ Изменить цену", callback_data=f"admin:sale:edit_price:{sale_id}"))
+        builder.row(InlineKeyboardButton(text="🗑 Удалить продажу (вернуть остаток)", callback_data=f"admin:sale:delete:{sale_id}"))
+        builder.row(InlineKeyboardButton(text="◀️ К истории", callback_data="admin:sale:history"))
+        return builder.as_markup()
+
+
 
     @staticmethod
     def writeoffs_menu() -> InlineKeyboardMarkup:
