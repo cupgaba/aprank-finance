@@ -182,6 +182,15 @@ async def on_user_joined_market_chat(event: ChatMemberUpdated, bot: Bot):
         new_status,
     )
 
+    # Ignore membership updates initiated by the bot itself (restrict/unrestrict actions)
+    if event.from_user and event.from_user.id == bot.id:
+        logger.info(
+            "[sub_guard] Skip bot-initiated chat_member update chat_id=%s user_id=%s",
+            event.chat.id,
+            event.new_chat_member.user.id,
+        )
+        return
+
     is_join_event = (
         old_status in {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED}
         and new_status in {ChatMemberStatus.MEMBER, ChatMemberStatus.RESTRICTED}
