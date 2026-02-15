@@ -107,10 +107,6 @@ async def _apply_join_restriction(bot: Bot, chat_id: int, user_id: int):
         config.channels,
     )
 
-    if _is_prompt_throttled(chat_id, user_id):
-        logger.info("[sub_guard] Prompt throttled chat_id=%s user_id=%s", chat_id, user_id)
-        return
-
     try:
         await bot.restrict_chat_member(
             chat_id=chat_id,
@@ -279,10 +275,6 @@ async def verify_market_subscription(callback: CallbackQuery, bot: Bot):
             )
             await callback.answer("Вы ещё не подписались на все каналы", show_alert=True)
             return
-
-    if _is_prompt_throttled(chat_id, user_id):
-        logger.info("[sub_guard] Prompt throttled chat_id=%s user_id=%s", chat_id, user_id)
-        return
 
     try:
         await bot.restrict_chat_member(
