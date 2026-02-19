@@ -112,12 +112,27 @@ async def complete_reservation(
         await callback.answer("❌ Резерв не найден или уже завершён", show_alert=True)
         return
 
+    # Create sale without affecting stock (it was already reserved earlier)
+    sale = await db.create_sale(
+        product_id=reservation.product_id,
+        quantity=reservation.quantity,
+        sale_price=reservation.product.sale_price,
+        notes=f"Продажа из резерва #{reservation.id}",
+        sold_by_id=user.id,
+        affect_stock=False,
+    )
+
+    if not sale:
+        await callback.answer("❌ Не удалось завершить резерв как продажу", show_alert=True)
+        return
+
     # Complete reservation
     await db.complete_reservation(reservation_id)
 
     # Log completion
     logger = LoggerService(bot, db)
     await logger.log_reservation_completed(reservation, user)
+    await logger.log_sale(sale, user)
 
     await callback.answer("✅ Резерв завершён")
 

@@ -687,16 +687,20 @@ class Database:
         quantity: int = 1,
         sale_price: float = None,
         notes: str = None,
-        sold_by_id: int = None
+        sold_by_id: int = None,
+        affect_stock: bool = True,
     ) -> Optional[Sale]:
-        """Create a sale and update product quantity"""
+        """Create a sale and optionally update product quantity"""
         async with self.session_factory() as session:
             result = await session.execute(
                 select(Product).where(Product.id == product_id)
             )
             product = result.scalar_one_or_none()
 
-            if not product or product.quantity < quantity:
+            if not product:
+                return None
+
+            if affect_stock and product.quantity < quantity:
                 return None
 
             sale = Sale(
@@ -709,8 +713,8 @@ class Database:
             )
             session.add(sale)
 
-            # Update product quantity
-            product.quantity -= quantity
+            if affect_stock:
+                product.quantity -= quantity
 
             await session.commit()
             await session.refresh(sale)
