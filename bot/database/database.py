@@ -243,6 +243,14 @@ class Database:
                 await session.refresh(user)
             return user
 
+    async def get_all_users(self, active_only: bool = True) -> Sequence[User]:
+        async with self.session_factory() as session:
+            query = select(User).order_by(User.created_at.asc())
+            if active_only:
+                query = query.where(User.is_active == True)
+            result = await session.execute(query)
+            return result.scalars().all()
+
     async def get_banned_users(self) -> Sequence[User]:
         async with self.session_factory() as session:
             result = await session.execute(

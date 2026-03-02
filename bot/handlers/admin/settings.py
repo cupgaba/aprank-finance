@@ -1,5 +1,5 @@
-from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message
+from aiogram import Router, F, Bot
+from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 
 from ...database import Database
@@ -434,6 +434,80 @@ def _build_contacts_text(s) -> str:
     if s.contacts_work_hours:
         parts.append(f"\n🕐 Время работы: {s.contacts_work_hours}")
     return "\n".join(parts)
+
+
+# ==================== BROADCAST ====================
+
+
+def _broadcast_hide_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Скрыть", callback_data="broadcast:hide")]])
+
+
+@settings_router.callback_query(F.data == "admin:settings:broadcast")
+async def broadcast_start(callback: CallbackQuery, state: FSMContext, is_admin: bool = False):
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    await state.set_state(AdminStates.broadcast_wait_content)
+    await callback.message.edit_text(
+        "📣 <b>Рассылка пользователям</b>\n\n"
+        "Отправьте сообщение для рассылки.\n"
+        "Поддерживаются все форматы: текст, фото, видео, документы, кружки,\n"
+        "голосовые, стикеры, а также подписи и форматирование.\n\n"
+        "Для отмены: /cancel",
+        parse_mode="HTML"
+    )
+
+
+@settings_router.message(AdminStates.broadcast_wait_content)
+async def broadcast_process(message: Message, db: Database, state: FSMContext, bot: Bot, is_admin: bool = False):
+    if not is_admin:
+        return
+
+    users = await db.get_all_users(active_only=True)
+    recipients = [u for u in users if u.telegram_id != message.from_user.id]
+
+    total = len(recipients)
+    sent = 0
+    errors = 0
+
+    status = await message.answer(
+        "📣 <b>Запуск рассылки</b>\n\n"
+        f"Отправлено: <b>{sent}/{total}</b>\n"
+        f"Ошибок: <b>{errors}</b>",
+        parse_mode="HTML"
+    )
+
+    for idx, user in enumerate(recipients, start=1):
+        try:
+            await message.copy_to(chat_id=user.telegram_id, reply_markup=_broadcast_hide_keyboard())
+            sent += 1
+        except Exception:
+            errors += 1
+
+        # update progress each 10 messages and on finish
+        if idx % 10 == 0 or idx == total:
+            try:
+                await status.edit_text(
+                    "📣 <b>Запуск рассылки</b>\n\n"
+                    f"Отправлено: <b>{sent}/{total}</b>\n"
+                    f"Ошибок: <b>{errors}</b>",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+
+    await state.clear()
+
+
+@settings_router.callback_query(F.data == "broadcast:hide")
+async def broadcast_hide(callback: CallbackQuery):
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    await callback.answer()
 
 
 # ==================== MARKETPLACE CHAT SUBSCRIPTION ====================

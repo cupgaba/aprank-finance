@@ -529,6 +529,7 @@ class AdminKeyboards:
         builder.row(InlineKeyboardButton(text="🔔 Время резерва", callback_data="admin:settings:reservation"))
         builder.row(InlineKeyboardButton(text="📌 Макс. резервов", callback_data="admin:settings:max_reservations"))
         builder.row(InlineKeyboardButton(text="📞 Контакты", callback_data="admin:settings:contacts"))
+        builder.row(InlineKeyboardButton(text="📣 Рассылка", callback_data="admin:settings:broadcast"))
         builder.row(InlineKeyboardButton(text="🛡 Подписка для бесед", callback_data="admin:settings:market_subs"))
         builder.row(InlineKeyboardButton(text="🚫 Управление банами", callback_data="admin:settings:bans"))
         return builder.as_markup()
