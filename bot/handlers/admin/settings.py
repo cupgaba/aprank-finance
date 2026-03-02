@@ -498,6 +498,21 @@ async def broadcast_process(message: Message, db: Database, state: FSMContext, b
             except Exception:
                 pass
 
+    try:
+        await status.edit_text(
+            "✅ <b>Рассылка завершена</b>\n\n"
+            f"Отправлено: <b>{sent}/{total}</b>\n"
+            f"Ошибок: <b>{errors}</b>",
+            parse_mode="HTML"
+        )
+    except Exception:
+        await message.answer(
+            "✅ <b>Рассылка завершена</b>\n\n"
+            f"Отправлено: <b>{sent}/{total}</b>\n"
+            f"Ошибок: <b>{errors}</b>",
+            parse_mode="HTML"
+        )
+
     await state.clear()
 
 
