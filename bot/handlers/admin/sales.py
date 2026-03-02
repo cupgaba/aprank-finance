@@ -452,38 +452,164 @@ async def sales_history(callback: CallbackQuery, db: Database, is_admin: bool):
         await callback.answer("⛔️ Нет доступа", show_alert=True)
         return
 
-    # Get sales for last 7 days
-    start_date = datetime.utcnow() - timedelta(days=7)
+    start_date = datetime.utcnow() - timedelta(days=30)
     sales = await db.get_sales_by_period(start_date)
 
     if not sales:
         await callback.message.edit_text(
             "💰 <b>История продаж</b>\n\n"
-            "За последние 7 дней продаж не было.",
+            "За последние 30 дней продаж не было.",
             reply_markup=AdminKeyboards.sales_menu(),
             parse_mode="HTML"
         )
         return
 
-    text = "💰 <b>История продаж (7 дней)</b>\n\n"
+    total_revenue = sum(s.sale_price * s.quantity for s in sales)
+    total_profit = sum(s.profit for s in sales)
 
-    # Group by date
-    by_date = {}
-    for sale in sales:
-        date_obj = sale.sold_at.date()
-        if date_obj not in by_date:
-            by_date[date_obj] = {"sales": [], "revenue": 0, "profit": 0}
-        by_date[date_obj]["sales"].append(sale)
-        by_date[date_obj]["revenue"] += sale.sale_price * sale.quantity
-        by_date[date_obj]["profit"] += sale.profit
+    await callback.message.edit_text(
+        "💰 <b>История продаж (30 дней)</b>\n\n"
+        f"Сделок: <b>{len(sales)}</b>\n"
+        f"Выручка: <b>{format_price(total_revenue)}</b>\n"
+        f"Прибыль: <b>{format_price(total_profit)}</b>\n\n"
+        "Выберите продажу:",
+        reply_markup=AdminKeyboards.sales_history_list(sales, page=0),
+        parse_mode="HTML"
+    )
 
-    for date_obj, data in sorted(by_date.items(), reverse=True):
-        date_str = date_obj.strftime("%d.%m.%Y")
-        text += f"📅 <b>{date_str}</b>\n"
-        text += f"   Продаж: {len(data['sales'])}, Выручка: {format_price(data['revenue'])}\n\n"
+
+@sales_router.callback_query(F.data.startswith("admin:sale:history:page:"))
+async def sales_history_page(callback: CallbackQuery, db: Database, is_admin: bool):
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    page = int(callback.data.split(":")[-1])
+    start_date = datetime.utcnow() - timedelta(days=30)
+    sales = await db.get_sales_by_period(start_date)
+
+    total_revenue = sum(s.sale_price * s.quantity for s in sales)
+    total_profit = sum(s.profit for s in sales)
+
+    await callback.message.edit_text(
+        "💰 <b>История продаж (30 дней)</b>\n\n"
+        f"Сделок: <b>{len(sales)}</b>\n"
+        f"Выручка: <b>{format_price(total_revenue)}</b>\n"
+        f"Прибыль: <b>{format_price(total_profit)}</b>\n\n"
+        "Выберите продажу:",
+        reply_markup=AdminKeyboards.sales_history_list(sales, page=page),
+        parse_mode="HTML"
+    )
+
+
+@sales_router.callback_query(F.data.startswith("admin:sale:view:"))
+async def sale_view(callback: CallbackQuery, db: Database, is_admin: bool):
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    sale_id = int(callback.data.split(":")[-1])
+    sale = await db.get_sale_by_id(sale_id)
+    if not sale:
+        await callback.answer("❌ Продажа не найдена", show_alert=True)
+        return
+
+    text = (
+        "💸 <b>Продажа</b>\n\n"
+        f"ID: <code>{sale.id}</code>\n"
+        f"Товар: <b>{sale.product.full_name}</b>\n"
+        f"Кол-во: <b>{sale.quantity}</b>\n"
+        f"Цена продажи: <b>{format_price(sale.sale_price)}</b>\n"
+        f"Цена закупки: <b>{format_price(sale.purchase_price)}</b>\n"
+        f"Прибыль: <b>{format_price(sale.profit)}</b>\n"
+        f"Дата: <b>{sale.sold_at.strftime('%d.%m.%Y %H:%M')}</b>"
+    )
 
     await callback.message.edit_text(
         text,
+        reply_markup=AdminKeyboards.sale_manage(sale.id),
+        parse_mode="HTML"
+    )
+
+
+@sales_router.callback_query(F.data.startswith("admin:sale:edit_price:"))
+async def sale_edit_price_start(callback: CallbackQuery, db: Database, state: FSMContext, is_admin: bool):
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    sale_id = int(callback.data.split(":")[-1])
+    sale = await db.get_sale_by_id(sale_id)
+    if not sale:
+        await callback.answer("❌ Продажа не найдена", show_alert=True)
+        return
+
+    await state.set_state(AdminStates.sale_edit_price)
+    await state.update_data(edit_sale_id=sale_id)
+
+    await callback.message.edit_text(
+        "✏️ <b>Изменение цены продажи</b>\n\n"
+        f"Товар: {sale.product.full_name}\n"
+        f"Текущая цена: <b>{format_price(sale.sale_price)}</b>\n\n"
+        "Введите новую цену:",
+        parse_mode="HTML"
+    )
+
+
+@sales_router.message(AdminStates.sale_edit_price)
+async def sale_edit_price_process(message: Message, db: Database, state: FSMContext, is_admin: bool):
+    if not is_admin:
+        return
+
+    try:
+        new_price = float(message.text.strip().replace(",", ".").replace(" ", ""))
+        if new_price <= 0:
+            raise ValueError()
+    except ValueError:
+        await message.answer("❌ Введите корректную цену (число больше 0):")
+        return
+
+    data = await state.get_data()
+    sale_id = data.get("edit_sale_id")
+    if not sale_id:
+        await state.clear()
+        await message.answer("❌ Не удалось определить продажу. Откройте историю снова.")
+        return
+
+    sale = await db.update_sale_price(sale_id, new_price)
+    await state.clear()
+
+    if not sale:
+        await message.answer("❌ Продажа не найдена.", reply_markup=AdminKeyboards.sales_menu())
+        return
+
+    await message.answer(
+        f"✅ Цена продажи обновлена: <b>{format_price(sale.sale_price)}</b>",
+        reply_markup=AdminKeyboards.sale_manage(sale.id),
+        parse_mode="HTML"
+    )
+
+
+@sales_router.callback_query(F.data.startswith("admin:sale:delete:"))
+async def sale_delete(callback: CallbackQuery, db: Database, is_admin: bool):
+    if not is_admin:
+        await callback.answer("⛔️ Нет доступа", show_alert=True)
+        return
+
+    sale_id = int(callback.data.split(":")[-1])
+    sale = await db.get_sale_by_id(sale_id)
+    if not sale:
+        await callback.answer("❌ Продажа не найдена", show_alert=True)
+        return
+
+    ok = await db.delete_sale(sale_id, restore_stock=True)
+    if not ok:
+        await callback.answer("❌ Не удалось удалить продажу", show_alert=True)
+        return
+
+    await callback.answer("✅ Продажа удалена, остаток возвращён")
+    await callback.message.edit_text(
+        "✅ Продажа удалена. Товар возвращён в остаток.",
         reply_markup=AdminKeyboards.sales_menu(),
         parse_mode="HTML"
     )

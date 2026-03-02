@@ -1,12 +1,14 @@
 from typing import Optional
 from datetime import datetime
 from aiogram import Bot
+import logging
 import pytz
 
 from ..config import settings
 from ..database.models import User, Product, Sale, WriteOff, Reservation, Supply
 
 _tz = pytz.timezone(settings.TIMEZONE)
+logger = logging.getLogger(__name__)
 
 
 def _now_str() -> str:
@@ -43,7 +45,7 @@ class LoggerService:
                 parse_mode="HTML"
             )
         except Exception as e:
-            print(f"Failed to send log: {e}")
+            logger.exception("Failed to send log to channel_id=%s log_type=%s err=%s", self.log_channel_id, log_type, e)
 
     async def log_product_created(self, product: Product, admin: User):
         """Log product creation"""
@@ -168,7 +170,7 @@ class LoggerService:
             message += f"🆔 @{user.username}\n"
         if user.phone:
             message += f"📱 {user.phone}\n"
-        message += f"\n🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        message += f"\n🕐 {_now_str()}"
         await self._send_log(message, "log_reservations")
 
     async def log_reservation_completed(self, reservation: Reservation, admin: User):

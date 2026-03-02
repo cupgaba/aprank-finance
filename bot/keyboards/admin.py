@@ -133,10 +133,12 @@ class AdminKeyboards:
         if total > per_page:
             nav_buttons = []
             if page > 0:
-                nav_buttons.append(InlineKeyboardButton(text="◀️", callback_data=f"admin:products_page:{page-1}"))
+                nav_cb = f"admin:brand_products_page:{brand_id}:{page-1}" if brand_id else f"admin:products_page:{page-1}"
+                nav_buttons.append(InlineKeyboardButton(text="◀️", callback_data=nav_cb))
             nav_buttons.append(InlineKeyboardButton(text=f"{page+1}/{(total-1)//per_page+1}", callback_data="noop"))
             if end < total:
-                nav_buttons.append(InlineKeyboardButton(text="▶️", callback_data=f"admin:products_page:{page+1}"))
+                nav_cb = f"admin:brand_products_page:{brand_id}:{page+1}" if brand_id else f"admin:products_page:{page+1}"
+                nav_buttons.append(InlineKeyboardButton(text="▶️", callback_data=nav_cb))
             builder.row(*nav_buttons)
 
         if brand_id:
@@ -323,6 +325,45 @@ class AdminKeyboards:
         return builder.as_markup()
 
     # ==================== WRITE-OFFS ====================
+    @staticmethod
+    def sales_history_list(sales: Sequence, page: int = 0, per_page: int = 10) -> InlineKeyboardMarkup:
+        """Sales history list with pagination"""
+        builder = InlineKeyboardBuilder()
+
+        total = len(sales)
+        start = page * per_page
+        end = start + per_page
+        page_sales = sales[start:end]
+
+        for sale in page_sales:
+            date_str = sale.sold_at.strftime("%d.%m %H:%M")
+            builder.row(InlineKeyboardButton(
+                text=f"💸 {date_str} • {sale.product.name} x{sale.quantity} • {sale.sale_price:.0f}₽",
+                callback_data=f"admin:sale:view:{sale.id}"
+            ))
+
+        if total > per_page:
+            nav_buttons = []
+            if page > 0:
+                nav_buttons.append(InlineKeyboardButton(text="◀️", callback_data=f"admin:sale:history:page:{page-1}"))
+            nav_buttons.append(InlineKeyboardButton(text=f"{page+1}/{(total-1)//per_page+1}", callback_data="noop"))
+            if end < total:
+                nav_buttons.append(InlineKeyboardButton(text="▶️", callback_data=f"admin:sale:history:page:{page+1}"))
+            builder.row(*nav_buttons)
+
+        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:sales_menu"))
+        return builder.as_markup()
+
+    @staticmethod
+    def sale_manage(sale_id: int) -> InlineKeyboardMarkup:
+        """Manage completed sale"""
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="✏️ Изменить цену", callback_data=f"admin:sale:edit_price:{sale_id}"))
+        builder.row(InlineKeyboardButton(text="🗑 Удалить продажу (вернуть остаток)", callback_data=f"admin:sale:delete:{sale_id}"))
+        builder.row(InlineKeyboardButton(text="◀️ К истории", callback_data="admin:sale:history"))
+        return builder.as_markup()
+
+
 
     @staticmethod
     def writeoffs_menu() -> InlineKeyboardMarkup:
@@ -488,6 +529,8 @@ class AdminKeyboards:
         builder.row(InlineKeyboardButton(text="🔔 Время резерва", callback_data="admin:settings:reservation"))
         builder.row(InlineKeyboardButton(text="📌 Макс. резервов", callback_data="admin:settings:max_reservations"))
         builder.row(InlineKeyboardButton(text="📞 Контакты", callback_data="admin:settings:contacts"))
+        builder.row(InlineKeyboardButton(text="📣 Рассылка", callback_data="admin:settings:broadcast"))
+        builder.row(InlineKeyboardButton(text="🛡 Подписка для бесед", callback_data="admin:settings:market_subs"))
         builder.row(InlineKeyboardButton(text="🚫 Управление банами", callback_data="admin:settings:bans"))
         return builder.as_markup()
 
@@ -605,6 +648,42 @@ class AdminKeyboards:
         ))
         builder.row(InlineKeyboardButton(text="👁 Предпросмотр", callback_data="admin:settings:contacts:preview"))
         builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:settings_menu"))
+        return builder.as_markup()
+
+
+    @staticmethod
+    def market_subscriptions_list(configs: Sequence) -> InlineKeyboardMarkup:
+        """Marketplace chats subscription settings list"""
+        builder = InlineKeyboardBuilder()
+        if configs:
+            for cfg in configs:
+                channels_count = len(cfg.channels) if getattr(cfg, "channels", None) else 0
+                builder.row(InlineKeyboardButton(
+                    text=f"💬 {cfg.chat_id} • каналов: {channels_count}",
+                    callback_data=f"admin:settings:market_sub:edit:{cfg.chat_id}"
+                ))
+        else:
+            builder.row(InlineKeyboardButton(text="Пока нет бесед", callback_data="noop"))
+
+        builder.row(InlineKeyboardButton(text="➕ Добавить беседу", callback_data="admin:settings:market_sub:add"))
+        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:settings_menu"))
+        return builder.as_markup()
+
+    @staticmethod
+    def market_subscription_actions(chat_id: int, channels: Sequence[int]) -> InlineKeyboardMarkup:
+        """Actions for specific marketplace chat config"""
+        builder = InlineKeyboardBuilder()
+        channels_text = ", ".join(str(c) for c in channels) if channels else "не заданы"
+        builder.row(InlineKeyboardButton(text=f"📡 Каналы: {channels_text[:48]}", callback_data="noop"))
+        builder.row(InlineKeyboardButton(
+            text="✏️ Изменить каналы",
+            callback_data=f"admin:settings:market_sub:set_channels:{chat_id}"
+        ))
+        builder.row(InlineKeyboardButton(
+            text="🗑 Удалить беседу",
+            callback_data=f"admin:settings:market_sub:delete:{chat_id}"
+        ))
+        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="admin:settings:market_subs"))
         return builder.as_markup()
 
     @staticmethod

@@ -269,6 +269,9 @@ class BotSettings(Base):
     contacts_contact: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=None)
     contacts_work_hours: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, default=None)
 
+    # Subscription guard for marketplace chats (JSON list)
+    market_chat_subscriptions: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=None)
+
 
 class SupplyDraft(Base):
     __tablename__ = "supply_drafts"

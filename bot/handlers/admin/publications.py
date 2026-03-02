@@ -1,4 +1,5 @@
 from aiogram import Router, F, Bot
+import logging
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
@@ -10,6 +11,7 @@ from ...services.channel import ChannelService
 from ...utils.formatting import format_pricelist
 
 publications_router = Router()
+logger = logging.getLogger(__name__)
 
 
 # ==================== PUBLISH PRICELIST ====================
@@ -37,6 +39,7 @@ async def publish_pricelist(callback: CallbackQuery, db: Database, bot: Bot, is_
         except TelegramBadRequest:
             pass
     else:
+        logger.error("Manual pricelist publication failed. reason=%s channel_id=%s", getattr(channel_service, "last_error", "n/a"), channel_service.channel_id)
         await callback.answer("❌ Ошибка публикации. Проверьте настройки канала.", show_alert=True)
 
 

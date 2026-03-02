@@ -70,6 +70,7 @@ class Database:
             "contacts_text": "TEXT",
             "contacts_contact": "TEXT",
             "contacts_work_hours": "VARCHAR(100)",
+            "market_chat_subscriptions": "TEXT",
         }
 
         for col_name, col_type in migrations.items():
@@ -241,6 +242,14 @@ class Database:
                 await session.commit()
                 await session.refresh(user)
             return user
+
+    async def get_all_users(self, active_only: bool = True) -> Sequence[User]:
+        async with self.session_factory() as session:
+            query = select(User).order_by(User.created_at.asc())
+            if active_only:
+                query = query.where(User.is_active == True)
+            result = await session.execute(query)
+            return result.scalars().all()
 
     async def get_banned_users(self) -> Sequence[User]:
         async with self.session_factory() as session:
@@ -686,16 +695,20 @@ class Database:
         quantity: int = 1,
         sale_price: float = None,
         notes: str = None,
-        sold_by_id: int = None
+        sold_by_id: int = None,
+        affect_stock: bool = True,
     ) -> Optional[Sale]:
-        """Create a sale and update product quantity"""
+        """Create a sale and optionally update product quantity"""
         async with self.session_factory() as session:
             result = await session.execute(
                 select(Product).where(Product.id == product_id)
             )
             product = result.scalar_one_or_none()
 
-            if not product or product.quantity < quantity:
+            if not product:
+                return None
+
+            if affect_stock and product.quantity < quantity:
                 return None
 
             sale = Sale(
@@ -708,12 +721,55 @@ class Database:
             )
             session.add(sale)
 
-            # Update product quantity
-            product.quantity -= quantity
+            if affect_stock:
+                product.quantity -= quantity
 
             await session.commit()
             await session.refresh(sale)
             return sale
+
+
+    async def get_sale_by_id(self, sale_id: int) -> Optional[Sale]:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(Sale).where(Sale.id == sale_id)
+            )
+            return result.scalar_one_or_none()
+
+    async def update_sale_price(self, sale_id: int, sale_price: float) -> Optional[Sale]:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(Sale).where(Sale.id == sale_id)
+            )
+            sale = result.scalar_one_or_none()
+            if not sale:
+                return None
+
+            sale.sale_price = sale_price
+            await session.commit()
+            await session.refresh(sale)
+            return sale
+
+    async def delete_sale(self, sale_id: int, restore_stock: bool = True) -> bool:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(Sale).where(Sale.id == sale_id)
+            )
+            sale = result.scalar_one_or_none()
+            if not sale:
+                return False
+
+            if restore_stock:
+                result = await session.execute(
+                    select(Product).where(Product.id == sale.product_id)
+                )
+                product = result.scalar_one_or_none()
+                if product:
+                    product.quantity += sale.quantity
+
+            await session.delete(sale)
+            await session.commit()
+            return True
 
     async def get_sales_by_period(
         self,

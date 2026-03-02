@@ -42,6 +42,7 @@ class AdminStates(StatesGroup):
     sale_enter_quantity = State()
     sale_enter_price = State()
     sale_search = State()
+    sale_edit_price = State()
 
     # Search states
     search_product = State()
@@ -68,11 +69,16 @@ class AdminStates(StatesGroup):
     settings_reminder_time = State()
     settings_low_stock_custom = State()
     settings_reservation_custom = State()
+    broadcast_wait_content = State()
 
     # Contacts settings states
     contacts_set_text = State()
     contacts_set_contact = State()
     contacts_set_hours = State()
+
+    # Marketplace subscription guard states
+    market_sub_chat_id = State()
+    market_sub_channels = State()
 
     # Ban states
     ban_user_id = State()
